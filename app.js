@@ -616,11 +616,33 @@ const sfx = (() => {
   ];
   const HIGH = [1046.5, 1174.66, 1318.5, 1567.98, 1760, 2093];
 
+  // iOS 17以降：音の扱いを「音楽再生」にする。消音スイッチや他アプリの状態に左右されにくくなる
+  try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch {}
+
   function ctx() {
     if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)();
-    if (ac.state === "suspended") ac.resume();
+    // iOSには "suspended" のほかに "interrupted"（電話・別タブ・バックグラウンド復帰など）という状態がある。
+    // "running" 以外なら何でも再開を試みる
+    if (ac.state !== "running") ac.resume().catch(() => {});
     return ac;
   }
+
+  // 最初のタッチで「無音を一瞬だけ鳴らす」と、以降の音が確実に出るようになる（iOSの定番の解錠テクニック）
+  function unlock() {
+    const a = ctx();
+    const buf = a.createBuffer(1, 1, 22050);
+    const src = a.createBufferSource();
+    src.buffer = buf;
+    src.connect(a.destination);
+    src.start(0);
+  }
+  ["touchend", "pointerup", "click"].forEach(ev =>
+    document.addEventListener(ev, unlock, { passive: true }));
+
+  // アプリを裏に回して戻ってきたとき、止まった音を再開する
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && ac && ac.state !== "running") ac.resume().catch(() => {});
+  });
   function tone(freq, at, dur, type = "triangle", vol = 0.22) {
     const a = ctx(), o = a.createOscillator(), g = a.createGain();
     o.type = type; o.frequency.value = freq;
