@@ -236,12 +236,11 @@ h1 {
 }
 
 /* ▼ ポンッと押される動き。55%のところで「着地」 */
-.stamp.land { animation: land .7s cubic-bezier(.2,.8,.3,1) both; }
+.stamp.land { animation: land .45s ease-out both; }
 @keyframes land {
-  0%   { transform: translateY(-50px) scale(2.8) rotate(calc(var(--r) - 30deg)); opacity: 0; }
-  35%  { opacity: 1; }
-  55%  { transform: translateY(0) scale(.8) rotate(var(--r)); }
-  75%  { transform: scale(1.1) rotate(var(--r)); }
+  0%   { transform: scale(1.15) rotate(var(--r)); }
+  30%  { transform: scale(.8) rotate(var(--r)); }
+  60%  { transform: scale(1.1) rotate(var(--r)); }
   100% { transform: scale(1) rotate(var(--r)); }
 }
 /* 着地後にツヤがシュッと流れる */
@@ -249,7 +248,7 @@ h1 {
   content: ""; position: absolute; inset: 0;
   background: linear-gradient(120deg, transparent 35%, rgba(255,255,255,.75) 50%, transparent 65%);
   background-size: 250% 100%;
-  animation: gloss .9s .45s ease-out both;
+  animation: gloss .9s .15s ease-out both;
 }
 @keyframes gloss { from { background-position: 150% 0; } to { background-position: -100% 0; } }
 
@@ -266,7 +265,7 @@ h1 {
   font-size: 10px; font-weight: 800; padding: 2px 7px; border-radius: 10px;
   background: #fff; color: #8a6a9a; box-shadow: 0 2px 6px rgba(0,0,0,.15);
 }
-.slot.landing .date { animation: fadeIn .4s .6s both; }
+.slot.landing .date { animation: fadeIn .4s .3s both; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 
 /* =========================================================
@@ -355,6 +354,76 @@ h1 {
 }
 .ov-btn:active { transform: translateY(5px); box-shadow: 0 1px 0 #d9572f; }
 
+/* =========================================================
+   スタンプを押したときの「ごほうびタイム」
+   ========================================================= */
+.show-layer {
+  position: fixed; inset: 0; z-index: 25; overflow: hidden;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+  opacity: 0; pointer-events: none; transition: opacity .3s;
+}
+.show-layer.show { opacity: 1; pointer-events: auto; }
+.show-layer.night { --ray: rgba(255,210,63,.22); --txt: #ffe27a; --txt2: #fff; }
+.show-layer.pink  { --ray: rgba(255,255,255,.6);  --txt: #ff3d7f; --txt2: #c2456f; }
+.show-bg { position: absolute; inset: 0; transition: opacity .5s; }
+.show-layer.night .show-bg { background: radial-gradient(circle at 50% 45%, rgba(110,70,220,.94), rgba(20,10,60,.97) 70%); }
+.show-layer.pink  .show-bg { background: radial-gradient(circle at 50% 45%, rgba(255,228,240,.96), rgba(255,170,200,.97) 75%); }
+.show-rays {
+  position: absolute; left: 50%; top: 50%; width: 150vmax; height: 150vmax; margin: -75vmax 0 0 -75vmax;
+  border-radius: 50%; transition: opacity .5s;
+  background: repeating-conic-gradient(var(--ray) 0 10deg, transparent 10deg 20deg);
+  -webkit-mask: radial-gradient(circle, #000 0, transparent 60%);
+          mask: radial-gradient(circle, #000 0, transparent 60%);
+  animation: spin 14s linear infinite;
+}
+.show-count, .show-praise, .show-hint { position: relative; font-weight: 800; text-align: center; transition: opacity .4s; }
+.show-count { font-size: 30px; color: var(--txt2); }
+.show-praise { font-size: 46px; color: var(--txt); text-shadow: 0 4px 0 rgba(0,0,0,.1); }
+.show-layer.night .show-praise { text-shadow: 0 0 18px rgba(255,210,63,.7); }
+.show-hint {
+  position: absolute; bottom: calc(env(safe-area-inset-bottom) + 36px);
+  font-size: 15px; color: var(--txt2); opacity: .85; animation: bounce 1.2s ease-in-out infinite;
+}
+.show-layer.show .show-count  { animation: dropIn .6s .15s cubic-bezier(.3,1.6,.5,1) both; }
+.show-layer.show .show-praise { animation: dropIn .6s .9s cubic-bezier(.3,1.6,.5,1) both, wobble 1.2s 1.6s ease-in-out infinite; }
+@keyframes dropIn { from { transform: translateY(-30px) scale(.4); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes wobble { 0%,100% { transform: rotate(0); } 25% { transform: rotate(-5deg) scale(1.06); } 75% { transform: rotate(5deg) scale(1.06); } }
+/* 帰るときは背景と文字だけ消して、スタンプはカードへ飛んでいく */
+.show-layer.leaving .show-bg, .show-layer.leaving .show-rays,
+.show-layer.leaving .show-count, .show-layer.leaving .show-praise, .show-layer.leaving .show-hint { opacity: 0; }
+
+.show-fly { position: relative; width: min(58vw, 230px); aspect-ratio: 1; }
+.show-fly .stamp { inset: 0; }
+.show-fly .stamp svg { width: 54%; }
+.show-fly .stamp-text { font-size: clamp(14px, 4.6vw, 20px); }
+.show-fly .stamp::before { font-size: 26px; }
+.show-layer.show .show-fly .stamp { animation: bigIn .8s cubic-bezier(.3,1.5,.5,1) both, breathe 1.4s .8s ease-in-out infinite; }
+.show-layer.leaving .show-fly .stamp { animation: none; }
+@keyframes bigIn { from { transform: scale(0) rotate(calc(var(--r) - 540deg)); } to { transform: scale(1) rotate(var(--r)); } }
+@keyframes breathe { 0%,100% { transform: scale(1) rotate(var(--r)); } 50% { transform: scale(1.06) rotate(var(--r)); } }
+
+.walk-paw { position: absolute; font-size: 34px; animation: pawStep 1.4s ease-out forwards; }
+@keyframes pawStep {
+  0% { opacity: 0; transform: scale(.3) rotate(var(--rot)); }
+  20% { opacity: 1; transform: scale(1.15) rotate(var(--rot)); }
+  70% { opacity: .9; transform: scale(1) rotate(var(--rot)); }
+  100% { opacity: 0; transform: scale(1) rotate(var(--rot)); }
+}
+
+/* =========================================================
+   おとなメニュー（タイトル長押しで開く）
+   ========================================================= */
+h1 { transition: transform .2s; }
+h1.holding { transform: scale(.88); transition: transform 1.9s linear; }
+.panel h3 { font-size: 22px; font-weight: 800; margin-bottom: 8px; }
+.panel small { font-size: 13px; opacity: .7; }
+.menu-btn {
+  display: block; width: 100%; height: 52px; margin-top: 10px; border: 0; border-radius: 16px;
+  font-size: 16px; font-weight: 800; background: #f3eefb; color: #4a2196;
+}
+.menu-btn.danger { background: #ffe3ea; color: #d93d75; }
+.menu-btn.cancel { background: none; color: #999; }
+
 /* 紙吹雪用キャンバス（タップは下に通す） */
 #fx { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 30; pointer-events: none; }
 </style>
@@ -378,6 +447,25 @@ h1 {
     <h2>おめでとう！</h2>
     <p id="ovText"></p>
     <button class="ov-btn" id="ovBtn">やったね！</button>
+  </div>
+</div>
+
+<div class="show-layer" id="show">
+  <div class="show-bg"></div>
+  <div class="show-rays"></div>
+  <div class="show-count" id="showCount"></div>
+  <div class="show-fly" id="showFly"></div>
+  <div class="show-praise" id="showPraise"></div>
+  <div class="show-hint">がめんを タップして キラキラ！</div>
+</div>
+
+<div class="overlay" id="menuOv">
+  <div class="panel">
+    <h3>🔧 おとなメニュー</h3>
+    <p id="menuText"></p>
+    <button class="menu-btn" data-act="stamps">いまのカードの スタンプを消す</button>
+    <button class="menu-btn danger" data-act="all">クリア回数も ふくめて ぜんぶ消す</button>
+    <button class="menu-btn cancel" data-act="cancel">やめる</button>
   </div>
 </div>
 
@@ -478,20 +566,22 @@ for (const c of CARDS) {
   };
   els[c.id].play.addEventListener("click", () => onPlay(c));
   els[c.id].undo.addEventListener("click", () => onUndo(c));
+  setupHold(c);
   render(c);
 }
 
 /* 状態(state) → 見た目 を毎回つくり直す。
    「データが正、画面はその写し」にしておくとバグりにくい */
-function render(c, { land = -1, pop = false } = {}) {
+function render(c, { land = -1, pop = false, pending = -1 } = {}) {
   const s = state[c.id], e = els[c.id];
-  const n = s.stamps.length;
+  // pending: 保存は済んでいるが、まだカードに着地していないスタンプの番号
+  const n = pending >= 0 ? pending : s.stamps.length;
   // 最後の1個を押した瞬間は、まだゴールを開けない（演出で開ける）
   const done = n >= GOAL && land !== GOAL - 1;
 
   let html = "";
   for (let i = 0; i < GOAL; i++) {
-    const st = s.stamps[i];
+    const st = i < n ? s.stamps[i] : null;
     const cls = ["slot", st && "filled", i === n && "next", pop && "pop", i === land && "landing"].filter(Boolean).join(" ");
     html += `<div class="${cls}" style="--i:${i}" data-i="${i}">`;
     html += st
@@ -518,19 +608,22 @@ function render(c, { land = -1, pop = false } = {}) {
    ========================================================= */
 let busy = false;   // 演出中の連打を防ぐ
 
-function onPlay(c) {
+async function onPlay(c) {
   if (busy) return;
   const s = state[c.id];
   if (s.stamps.length >= GOAL) return newCard(c);
 
   busy = true;
   s.stamps.push({ t: Date.now(), r: Math.round(rand(-14, 14)) });
-  saveState();
+  saveState();                         // 先に保存しておく（途中でアプリを閉じても消えない）
   const i = s.stamps.length - 1;
-  render(c, { land: i });
-  sfx.stamp(i, 0.38);   // 0.38秒後（着地の瞬間）に鳴らす予約
+  render(c, { pending: i });
 
-  setTimeout(() => {    // 着地の瞬間の演出
+  await showStamp(c, i);               // ごほうびタイム（約4秒）が終わるまで待つ
+
+  render(c, { land: i });
+  sfx.stamp(i, 0.08);
+  setTimeout(() => {                   // カードに着地した瞬間の演出
     const slot = els[c.id].grid.querySelector(`[data-i="${i}"]`);
     const ring = document.createElement("div");
     ring.className = "ring";
@@ -539,11 +632,132 @@ function onPlay(c) {
     card.classList.remove("thump"); void card.offsetWidth; card.classList.add("thump");
     const r = slot.getBoundingClientRect();
     fx.burst(r.left + r.width / 2, r.top + r.height / 2, c, 30, 8);
-  }, 380);
+  }, 100);
 
-  if (i === GOAL - 1) setTimeout(() => celebrate(c), 950);
-  else setTimeout(() => (busy = false), 800);
+  if (i === GOAL - 1) setTimeout(() => celebrate(c), 700);
+  else setTimeout(() => (busy = false), 500);
 }
+
+/* =========================================================
+   ごほうびタイム
+   画面いっぱいに大きなスタンプ → メロディ → カードへ飛んでいく
+   ========================================================= */
+const PRAISE = ["すごい！", "じょうず！", "かっこいい！", "てんさい！", "ばっちり！", "がんばったね！", "ステキ！"];
+const showEl = document.getElementById("show");
+const showFly = document.getElementById("showFly");
+let showCard = null;
+
+function centerOf(el) {
+  const r = el.getBoundingClientRect();
+  return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width };
+}
+
+function showStamp(c, i) {
+  return new Promise(resolve => {
+    const st = state[c.id].stamps[i];
+    showCard = c;
+    showEl.className = `show-layer ${c.theme}`;
+    showFly.innerHTML = `<div class="stamp" style="--r:${st.r}deg">${c.svg}<span class="stamp-text">よくできました</span></div>`;
+    document.getElementById("showCount").textContent = `${i + 1}かいめ！`;
+    document.getElementById("showPraise").textContent = pick(PRAISE);
+    void showEl.offsetWidth;           // リフローさせてからクラスを付けると、毎回アニメが最初から再生される
+    showEl.classList.add("show");
+    sfx.jingle(i);                     // タップ処理の中で鳴らし始める（iOSの音の制約）
+
+    setTimeout(() => { const p = centerOf(showFly); fx.burst(p.x, p.y, c, 45, 11); }, 650);
+    for (let k = 0; k < 7; k++) {      // スタンプのまわりでキラキラが順番にはじける
+      setTimeout(() => {
+        const p = centerOf(showFly), a = rand(0, Math.PI * 2), rad = p.w * 0.65;
+        fx.burst(p.x + Math.cos(a) * rad, p.y + Math.sin(a) * rad, c, 7, 3.5);
+      }, 950 + k * 320);
+    }
+    if (c.theme === "pink") pawWalk();
+    else setTimeout(() => fx.rain(c, 60), 300);
+
+    setTimeout(() => flyToCard(c, i, resolve), 3300);
+  });
+}
+
+/* ねこカード：肉球がトコトコ歩いていく */
+function pawWalk() {
+  for (let k = 0; k < 9; k++) {
+    setTimeout(() => {
+      const p = document.createElement("span");
+      p.className = "walk-paw";
+      p.textContent = "🐾";
+      const x = 10 + (k / 8) * (innerWidth - 60);
+      const y = innerHeight * 0.76 + (k % 2 ? -22 : 22);
+      p.style.cssText = `left:${x}px;top:${y}px;--rot:${80 + rand(-10, 10)}deg`;
+      showEl.appendChild(p);
+      sfx.step(k);
+      setTimeout(() => p.remove(), 1500);
+    }, 500 + k * 260);
+  }
+}
+
+/* 大きいスタンプを、カードの枠の位置・大きさまで縮めながら飛ばす。
+   「今の位置」と「行き先の位置」の差を計算して transform で動かす（FLIPという定番テクニック） */
+function flyToCard(c, i, resolve) {
+  const slot = els[c.id].grid.querySelector(`[data-i="${i}"]`);
+  const from = centerOf(showFly), to = centerOf(slot);
+  showEl.classList.add("leaving");
+  sfx.whoosh();
+  const anim = showFly.animate(
+    [{ transform: "translate(0, 0) scale(1)" },
+     { transform: `translate(${to.x - from.x}px, ${to.y - from.y}px) scale(${to.w / from.w})` }],
+    { duration: 550, easing: "cubic-bezier(.55, 0, .75, .2)", fill: "forwards" });
+  anim.onfinish = () => {
+    showEl.classList.remove("show", "leaving");
+    showFly.innerHTML = "";
+    anim.cancel();
+    showEl.querySelectorAll(".walk-paw").forEach(e => e.remove());
+    resolve();
+  };
+}
+
+/* ごほうびタイム中に画面をタップすると、そこでキラキラ＋音 */
+showEl.addEventListener("pointerdown", e => {
+  if (!showEl.classList.contains("show") || showEl.classList.contains("leaving")) return;
+  fx.burst(e.clientX, e.clientY, showCard, 14, 6);
+  sfx.sparkle();
+});
+
+/* =========================================================
+   おとなメニュー：タイトルを2秒長押しで開く（子どもが偶然開かないように）
+   ========================================================= */
+const menuOv = document.getElementById("menuOv");
+let menuCard = null;
+
+function setupHold(c) {
+  const h1 = els[c.id].page.querySelector("h1");
+  let timer = null;
+  h1.addEventListener("pointerdown", () => {
+    h1.classList.add("holding");
+    timer = setTimeout(() => { h1.classList.remove("holding"); openMenu(c); }, 2000);
+  });
+  const stop = () => { clearTimeout(timer); h1.classList.remove("holding"); };
+  ["pointerup", "pointerleave", "pointercancel"].forEach(ev => h1.addEventListener(ev, stop));
+}
+
+function openMenu(c) {
+  if (busy) return;
+  menuCard = c;
+  const s = state[c.id];
+  menuOv.dataset.theme = c.theme;
+  document.getElementById("menuText").innerHTML =
+    `「${c.title}」の カードを どうする？<br><small>いま：スタンプ ${s.stamps.length}こ ／ クリア ${s.cleared}まい</small>`;
+  menuOv.classList.add("show");
+}
+
+menuOv.addEventListener("click", e => {
+  const act = e.target.dataset?.act;
+  if (!act && e.target !== menuOv) return;   // パネルの余白タップは無視、背景タップは閉じる
+  const s = state[menuCard.id];
+  if (act === "stamps") s.stamps = [];
+  if (act === "all") { s.stamps = []; s.cleared = 0; }
+  if (act === "stamps" || act === "all") { saveState(); render(menuCard, { pop: true }); }
+  menuOv.classList.remove("show");
+});
 
 function celebrate(c) {
   const goal = els[c.id].grid.querySelector(".goal");
@@ -694,8 +908,8 @@ const fx = (() => {
     start();
   }
 
-  function rain(c) {
-    for (let i = 0; i < 170; i++) {
+  function rain(c, count = 170) {
+    for (let i = 0; i < count; i++) {
       parts.push(make(rand(0, W), rand(-H * 0.8, -20), rand(-1, 1), rand(2, 5), c,
         { g: 0.04, drag: 0.995, max: 400, swayAmp: 1.2, emojiRate: 0.25 }));
     }
@@ -776,7 +990,44 @@ const sfx = (() => {
     o.connect(g).connect(a.destination);
     o.start(at); o.stop(at + 0.25);
   }
+  // 1回ごとにちがう、短いオリジナルのメロディ（ドレミソラだけで作ると明るく聞こえる）
+  const JINGLES = [
+    [392, 523.25, 659.25, 783.99, 659.25, 783.99, 1046.5],
+    [523.25, 587.33, 659.25, 783.99, 880, 783.99, 1046.5],
+    [659.25, 783.99, 880, 783.99, 659.25, 783.99, 1046.5, 1174.66],
+    [783.99, 659.25, 523.25, 659.25, 783.99, 880, 1046.5, 1318.5],
+    [523.25, 659.25, 783.99, 1046.5, 783.99, 1046.5, 1318.5, 1567.98],
+  ];
+  const HIGH = [1046.5, 1174.66, 1318.5, 1567.98, 1760, 2093];
   return {
+    jingle(i) {
+      const t = ctx().currentTime + 0.05;
+      const mel = JINGLES[i % JINGLES.length];
+      mel.forEach((f, k) => piano(f, t + k * 0.15, k === mel.length - 1 ? 1.5 : 0.5));
+      piano(130.81, t, 1.6);                         // 低い「ド」で支える
+      piano(196, t + mel.length * 0.15 - 0.15, 1.6); // 最後に低い「ソ」
+    },
+    sparkle() {
+      const t = ctx().currentTime;
+      const f = pick(HIGH);
+      tone(f, t, 0.35, "sine", 0.12);
+      tone(f * 1.5, t + 0.05, 0.25, "sine", 0.04);
+    },
+    step(k) {
+      const t = ctx().currentTime;
+      tone(1200 + (k % 2) * 200, t, 0.1, "sine", 0.06);
+    },
+    whoosh() {
+      const a = ctx(), t = a.currentTime, o = a.createOscillator(), g = a.createGain();
+      o.type = "sine";
+      o.frequency.setValueAtTime(400, t);
+      o.frequency.exponentialRampToValueAtTime(1600, t + 0.4);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.07, t + 0.1);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
+      o.connect(g).connect(a.destination);
+      o.start(t); o.stop(t + 0.5);
+    },
     stamp(i, delay) {
       const t = ctx().currentTime + delay;
       thump(t);
