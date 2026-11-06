@@ -1,0 +1,483 @@
+/* =========================================================
+   ベース
+   ========================================================= */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", system-ui, sans-serif;
+  overflow: hidden;
+  overscroll-behavior: none;          /* 引っぱってバウンドするのを防ぐ */
+  -webkit-user-select: none; user-select: none;
+  -webkit-touch-callout: none;        /* 長押しメニューを出さない */
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;         /* ダブルタップズームを無効化 */
+  background: #1a0f45;
+}
+button { font: inherit; cursor: pointer; }
+
+/* =========================================================
+   背景（2枚を重ねて、スワイプ量に合わせてクロスフェード）
+   ========================================================= */
+.bg { position: fixed; inset: 0; overflow: hidden; }
+.bg-night {
+  background:
+    radial-gradient(ellipse 120% 70% at 50% 0%, #6a48c9 0%, #3a1f86 45%, #1a0f45 100%);
+}
+.moon {
+  position: absolute; top: calc(env(safe-area-inset-top) + 70px); right: 8%;
+  width: 70px; height: 70px; border-radius: 50%;
+  box-shadow: 16px -6px 0 0 #fff3b0;   /* 影で三日月をつくる */
+  filter: drop-shadow(0 0 18px rgba(255,240,160,.6));
+  transform: rotate(-20deg);
+}
+.star {
+  position: absolute; width: var(--s); height: var(--s); border-radius: 50%;
+  background: #fff; box-shadow: 0 0 6px #fff;
+  animation: twinkle ease-in-out infinite;
+}
+@keyframes twinkle { 0%,100% { opacity: .2; transform: scale(.7); } 50% { opacity: 1; transform: scale(1.2); } }
+.shooting {
+  position: absolute; top: 15%; left: -20%; width: 120px; height: 2px;
+  background: linear-gradient(90deg, rgba(255,255,255,0), #fff);
+  border-radius: 2px; transform: rotate(18deg);
+  animation: shoot 7s ease-in infinite;
+}
+@keyframes shoot {
+  0%, 82% { transform: translate(0,0) rotate(18deg); opacity: 0; }
+  85% { opacity: 1; }
+  100% { transform: translate(140vw, 45vw) rotate(18deg); opacity: 0; }
+}
+
+.bg-pink {
+  background: linear-gradient(180deg, #ffd9ea 0%, #ffe9f1 50%, #fff1d9 100%);
+}
+.paw {
+  position: absolute; bottom: -60px; opacity: .22;
+  animation: floatUp linear infinite;
+}
+@keyframes floatUp {
+  from { transform: translateY(0) rotate(var(--rot)); }
+  to   { transform: translateY(-120vh) rotate(calc(var(--rot) + 40deg)); }
+}
+
+/* =========================================================
+   上部タブ
+   ========================================================= */
+.tabs {
+  position: fixed; z-index: 5;
+  top: calc(env(safe-area-inset-top) + 12px); left: 50%; transform: translateX(-50%);
+  width: min(92vw, 360px);
+  display: flex; padding: 5px; border-radius: 999px;
+  background: rgba(255,255,255,.85);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  box-shadow: 0 6px 20px rgba(0,0,0,.15);
+}
+.tabs button {
+  flex: 1; position: relative; z-index: 1;
+  border: 0; background: none; padding: 10px 6px; border-radius: 999px;
+  font-weight: 800; font-size: 14px; color: #a28aaf; transition: color .3s;
+  white-space: nowrap;
+}
+.tabs button.active { color: #4a2196; }
+.tab-indicator {
+  position: absolute; top: 5px; bottom: 5px; left: 5px; width: calc((100% - 10px) / var(--n, 2));
+  border-radius: 999px; background: #fff;
+  box-shadow: 0 2px 8px rgba(74,33,150,.2);
+  transform: translateX(calc(var(--p, 0) * 100%));
+}
+
+/* =========================================================
+   ページ（横スワイプで切り替え：scroll-snap）
+   ========================================================= */
+.pages {
+  position: fixed; inset: 0; z-index: 1;
+  display: flex; overflow-x: auto; overflow-y: hidden;
+  scroll-snap-type: x mandatory; scrollbar-width: none;
+}
+.pages::-webkit-scrollbar { display: none; }
+.page {
+  flex: 0 0 100%; height: 100%;
+  scroll-snap-align: center; scroll-snap-stop: always;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px;
+  padding: calc(env(safe-area-inset-top) + 78px) 18px calc(env(safe-area-inset-bottom) + 14px);
+}
+.card, .actions { width: 100%; max-width: 440px; }
+
+/* テーマごとの色（CSS変数で切り替え） */
+.night { --accent: #ffd23f; --glow: rgba(255,210,63,.55); --edge: #c98a00; --ring: #ffe27a; }
+.pink  { --accent: #ff5c93; --glow: rgba(255,92,147,.5);  --edge: #d93d75; --ring: #ff8db5; }
+
+/* =========================================================
+   カード本体
+   ========================================================= */
+.card { position: relative; border-radius: 30px; padding: 20px 18px 16px; }
+.night .card {
+  background: linear-gradient(160deg, rgba(123,79,224,.38), rgba(40,20,90,.6));
+  border: 2px solid rgba(255,210,63,.55);
+  box-shadow: 0 0 34px rgba(255,210,63,.2), inset 0 0 30px rgba(255,255,255,.05);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+}
+.pink .card {
+  background: #fff; border: 3px solid #ffc2d6; margin-top: 24px;
+  box-shadow: 0 14px 30px rgba(255,92,147,.2);
+}
+/* ねこカードの耳 */
+.pink .card::before, .pink .card::after {
+  content: ""; position: absolute; top: -32px; width: 0; height: 0;
+  border-left: 26px solid transparent; border-right: 26px solid transparent;
+  border-bottom: 36px solid #ffc2d6;
+}
+.pink .card::before { left: 34px; transform: rotate(-12deg); }
+.pink .card::after  { right: 34px; transform: rotate(12deg); }
+
+.card.thump { animation: thump .45s ease-out; }
+@keyframes thump {
+  0% { transform: none; } 25% { transform: translateY(4px) scale(.985); }
+  55% { transform: translateY(-2px) scale(1.01); } 100% { transform: none; }
+}
+
+.card-head { text-align: center; }
+.sub { font-size: 12px; letter-spacing: .12em; opacity: .75; font-weight: 800; }
+.night .sub { color: #e6dcff; }
+.pink .sub { color: #e07aa0; }
+h1 {
+  font-size: clamp(24px, 7.4vw, 32px); font-weight: 800; line-height: 1.3;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+}
+.night h1 { color: #ffe27a; text-shadow: 0 0 14px rgba(255,210,63,.6); }
+.pink h1 { color: #ff5c93; }
+.head-icon { display: inline-block; font-size: 1.1em; }
+.night .head-icon { animation: floaty 2.6s ease-in-out infinite; }
+.pink .head-icon { animation: wiggle 1.8s ease-in-out infinite; }
+@keyframes floaty { 0%,100% { transform: translateY(0) rotate(-6deg); } 50% { transform: translateY(-6px) rotate(6deg); } }
+@keyframes wiggle { 0%,60%,100% { transform: rotate(0); } 70% { transform: rotate(-14deg); } 80% { transform: rotate(14deg); } 90% { transform: rotate(-8deg); } }
+.medals { min-height: 22px; font-size: 15px; font-weight: 800; margin-top: 2px; }
+.night .medals { color: #ffe9a8; }
+.pink .medals { color: #e07aa0; }
+
+/* =========================================================
+   スタンプ枠
+   ========================================================= */
+.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 14px 4px 4px; }
+.slot, .goal {
+  position: relative; aspect-ratio: 1; border-radius: 50%;
+  display: grid; place-items: center;
+}
+.night .slot { border: 3px dashed rgba(255,210,63,.45); background: rgba(255,255,255,.04); }
+.pink  .slot { border: 3px dashed #f9a3c3; background: #fff5f9; }
+.slot.filled { border-color: transparent; background: none; }
+.num { font-size: clamp(22px, 7vw, 30px); font-weight: 800; opacity: .55; color: var(--accent); }
+
+/* 次に押される枠を「ここだよ」と光らせる */
+.slot.next::after {
+  content: ""; position: absolute; inset: -4px; border-radius: 50%;
+  animation: nextPulse 1.6s ease-out infinite;
+}
+@keyframes nextPulse {
+  0%   { box-shadow: 0 0 0 0 var(--glow); }
+  80%,100% { box-shadow: 0 0 0 14px rgba(0,0,0,0); }
+}
+
+/* 新しいカードのとき、枠がポンポン出てくる */
+.pop { animation: popIn .55s cubic-bezier(.3,1.7,.5,1) both; animation-delay: calc(var(--i) * 80ms); }
+@keyframes popIn { from { transform: scale(0); } to { transform: scale(1); } }
+
+/* =========================================================
+   スタンプ
+   ========================================================= */
+.stamp {
+  position: absolute; inset: 3%; border-radius: 50%; overflow: hidden;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  transform: rotate(var(--r));
+}
+.night .stamp {
+  background: radial-gradient(circle at 35% 30%, #8a5ff0, #4a2196 72%);
+  border: 3px solid #ffd23f;
+  box-shadow: inset 0 0 0 3px #4a2196, inset 0 0 0 5px rgba(255,210,63,.6),
+              0 4px 14px rgba(0,0,0,.35), 0 0 18px rgba(255,210,63,.4);
+}
+.pink .stamp {
+  background: radial-gradient(circle at 35% 30%, #ffa3c4, #ff5c93 72%);
+  border: 3px solid #fff;
+  box-shadow: inset 0 0 0 3px #ff5c93, inset 0 0 0 5px rgba(255,255,255,.7),
+              0 5px 12px rgba(255,92,147,.45);
+}
+.stamp svg { width: 52%; height: auto; margin-top: -6%; }
+.stamp-text { font-size: clamp(6.5px, 2vw, 9px); font-weight: 800; letter-spacing: -.03em; margin-top: 1%; white-space: nowrap; }
+.night .stamp-text { color: #ffe27a; }
+.pink .stamp-text { color: #fff; }
+/* 夜カードのスタンプはキラッと光り続ける */
+.night .stamp::before {
+  content: "✦"; position: absolute; top: 8%; right: 16%;
+  color: #fff6c4; font-size: 12px; animation: twinkle 2s ease-in-out infinite;
+}
+
+/* ▼ ポンッと押される動き。55%のところで「着地」 */
+.stamp.land { animation: land .45s ease-out both; }
+@keyframes land {
+  0%   { transform: scale(1.15) rotate(var(--r)); }
+  30%  { transform: scale(.8) rotate(var(--r)); }
+  60%  { transform: scale(1.1) rotate(var(--r)); }
+  100% { transform: scale(1) rotate(var(--r)); }
+}
+/* 着地後にツヤがシュッと流れる */
+.stamp.land::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(120deg, transparent 35%, rgba(255,255,255,.75) 50%, transparent 65%);
+  background-size: 250% 100%;
+  animation: gloss .9s .15s ease-out both;
+}
+@keyframes gloss { from { background-position: 150% 0; } to { background-position: -100% 0; } }
+
+/* 着地の瞬間に広がる輪 */
+.ring {
+  position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
+  border: 4px solid var(--ring);
+  animation: ring .6s ease-out forwards;
+}
+@keyframes ring { from { transform: scale(.7); opacity: .9; } to { transform: scale(1.9); opacity: 0; } }
+
+.date {
+  position: absolute; right: -4px; bottom: -4px; z-index: 2;
+  font-size: 10px; font-weight: 800; padding: 2px 7px; border-radius: 10px;
+  background: #fff; color: #8a6a9a; box-shadow: 0 2px 6px rgba(0,0,0,.15);
+}
+.slot.landing .date { animation: fadeIn .4s .3s both; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+/* =========================================================
+   ゴール枠
+   ========================================================= */
+.night .goal { background: rgba(255,210,63,.08); border: 3px solid rgba(255,210,63,.35); }
+.pink  .goal { background: #fff0f6; border: 3px solid #ffc2d6; }
+.gift {
+  position: relative; z-index: 1; font-size: clamp(32px, 10.5vw, 46px);
+  filter: grayscale(.7); opacity: .6; transition: filter .4s, opacity .4s;
+}
+.glabel { position: absolute; bottom: 7%; z-index: 1; font-size: 11px; font-weight: 800; color: var(--accent); }
+.goal.done .gift { filter: none; opacity: 1; animation: bounce 1s ease-in-out infinite; }
+.goal.done::before {   /* 後ろでくるくる回る光 */
+  content: ""; position: absolute; inset: -22%; border-radius: 50%;
+  background: repeating-conic-gradient(rgba(255,220,90,.75) 0 12deg, transparent 12deg 24deg);
+  -webkit-mask: radial-gradient(circle, #000 25%, transparent 68%);
+          mask: radial-gradient(circle, #000 25%, transparent 68%);
+  animation: spin 8s linear infinite;
+}
+.goal.unlock { animation: unlock .6s cubic-bezier(.3,1.8,.5,1); }
+@keyframes unlock { 0% { transform: scale(1); } 40% { transform: scale(1.45); } 100% { transform: scale(1); } }
+@keyframes bounce { 0%,100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-7px) scale(1.08); } }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.msg { text-align: center; font-weight: 800; font-size: 17px; margin-top: 12px; min-height: 1.5em; }
+.night .msg { color: #fff; }
+.pink .msg { color: #c2456f; }
+
+/* =========================================================
+   ボタン
+   ========================================================= */
+.actions { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.play {
+  width: 100%; height: 78px; border: 0; border-radius: 999px;
+  font-size: 24px; font-weight: 800; letter-spacing: .04em;
+  position: relative; overflow: hidden;
+  box-shadow: 0 7px 0 var(--edge), 0 14px 26px var(--glow);
+  transition: transform .08s, box-shadow .08s;
+}
+.night .play { background: linear-gradient(180deg, #ffe680, #ffbf1f); color: #4a2196; }
+.pink  .play { background: linear-gradient(180deg, #ff9cc0, #ff5c93); color: #fff; text-shadow: 0 2px 0 rgba(0,0,0,.12); }
+.play:active { transform: translateY(6px); box-shadow: 0 1px 0 var(--edge), 0 4px 10px var(--glow); }
+.play::after {   /* ボタンに流れるツヤ */
+  content: ""; position: absolute; top: 0; left: -60%; width: 40%; height: 100%;
+  background: linear-gradient(100deg, transparent, rgba(255,255,255,.65), transparent);
+  transform: skewX(-20deg); animation: shine 3.2s ease-in-out infinite;
+}
+@keyframes shine { 0% { left: -60%; } 55%, 100% { left: 130%; } }
+
+.undo {
+  border: 0; background: none; padding: 8px 14px; font-size: 13px; font-weight: 800;
+  opacity: .55; border-radius: 999px; transition: all .2s;
+}
+.night .undo { color: #e6dcff; }
+.pink .undo { color: #c2456f; }
+.undo.armed { opacity: 1; background: rgba(255,255,255,.85); color: #d93d75; }
+.undo.hidden { visibility: hidden; }
+
+/* =========================================================
+   おめでとう画面
+   ========================================================= */
+.overlay {
+  position: fixed; inset: 0; z-index: 20; display: grid; place-items: center;
+  background: rgba(20,10,40,.5);
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  opacity: 0; pointer-events: none; transition: opacity .3s;
+}
+.overlay.show { opacity: 1; pointer-events: auto; }
+.panel {
+  width: min(86vw, 360px); padding: 28px 22px 24px; border-radius: 30px; text-align: center;
+  background: #fff; transform: scale(.5); transition: transform .55s cubic-bezier(.3,1.7,.5,1);
+}
+.overlay.show .panel { transform: scale(1); }
+.overlay[data-theme="night"] .panel { background: linear-gradient(170deg, #fff8dc, #fff); border: 4px solid #ffd23f; color: #4a2196; }
+.overlay[data-theme="pink"]  .panel { background: linear-gradient(170deg, #ffe3ee, #fff); border: 4px solid #ff8db5; color: #c2456f; }
+.medal { font-size: 88px; line-height: 1.1; display: inline-block; }
+.overlay.show .medal { animation: medalSpin 1.3s ease-out; }
+@keyframes medalSpin { from { transform: rotateY(1080deg) scale(.2); } to { transform: rotateY(0) scale(1); } }
+.panel h2 { font-size: 32px; font-weight: 800; margin: 6px 0 8px; }
+.panel p { font-size: 17px; font-weight: 800; line-height: 1.6; }
+.ov-btn {
+  margin-top: 18px; width: 100%; height: 60px; border: 0; border-radius: 999px;
+  font-size: 20px; font-weight: 800; color: #fff;
+  background: linear-gradient(180deg, #ffb347, #ff7b54); box-shadow: 0 6px 0 #d9572f;
+}
+.ov-btn:active { transform: translateY(5px); box-shadow: 0 1px 0 #d9572f; }
+
+/* =========================================================
+   スタンプを押したときの「ごほうびタイム」
+   ========================================================= */
+.show-layer {
+  position: fixed; inset: 0; z-index: 25; overflow: hidden;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+  opacity: 0; pointer-events: none; transition: opacity .3s;
+}
+.show-layer.show { opacity: 1; pointer-events: auto; }
+.show-layer.night { --ray: rgba(255,210,63,.22); --txt: #ffe27a; --txt2: #fff; }
+.show-layer.pink  { --ray: rgba(255,255,255,.6);  --txt: #ff3d7f; --txt2: #c2456f; }
+.show-bg { position: absolute; inset: 0; transition: opacity .5s; }
+.show-layer.night .show-bg { background: radial-gradient(circle at 50% 45%, rgba(110,70,220,.94), rgba(20,10,60,.97) 70%); }
+.show-layer.pink  .show-bg { background: radial-gradient(circle at 50% 45%, rgba(255,228,240,.96), rgba(255,170,200,.97) 75%); }
+.show-rays {
+  position: absolute; left: 50%; top: 50%; width: 150vmax; height: 150vmax; margin: -75vmax 0 0 -75vmax;
+  border-radius: 50%; transition: opacity .5s;
+  background: repeating-conic-gradient(var(--ray) 0 10deg, transparent 10deg 20deg);
+  -webkit-mask: radial-gradient(circle, #000 0, transparent 60%);
+          mask: radial-gradient(circle, #000 0, transparent 60%);
+  animation: spin 14s linear infinite;
+}
+.show-count, .show-praise, .show-hint { position: relative; font-weight: 800; text-align: center; transition: opacity .4s; }
+.show-count { font-size: 30px; color: var(--txt2); }
+.show-praise { font-size: 46px; color: var(--txt); text-shadow: 0 4px 0 rgba(0,0,0,.1); }
+.show-layer.night .show-praise { text-shadow: 0 0 18px rgba(255,210,63,.7); }
+.show-hint {
+  position: absolute; bottom: calc(env(safe-area-inset-bottom) + 36px);
+  font-size: 15px; color: var(--txt2); opacity: .85; animation: bounce 1.2s ease-in-out infinite;
+}
+.show-layer.show .show-count  { animation: dropIn .6s .15s cubic-bezier(.3,1.6,.5,1) both; }
+.show-layer.show .show-praise { animation: dropIn .6s .9s cubic-bezier(.3,1.6,.5,1) both, wobble 1.2s 1.6s ease-in-out infinite; }
+@keyframes dropIn { from { transform: translateY(-30px) scale(.4); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes wobble { 0%,100% { transform: rotate(0); } 25% { transform: rotate(-5deg) scale(1.06); } 75% { transform: rotate(5deg) scale(1.06); } }
+/* 帰るときは背景と文字だけ消して、スタンプはカードへ飛んでいく */
+.show-layer.leaving .show-bg, .show-layer.leaving .show-rays,
+.show-layer.leaving .show-count, .show-layer.leaving .show-praise, .show-layer.leaving .show-hint { opacity: 0; }
+
+.show-fly { position: relative; width: min(58vw, 230px); aspect-ratio: 1; }
+.show-fly .stamp { inset: 0; }
+.show-fly .stamp svg { width: 54%; }
+.show-fly .stamp-text { font-size: clamp(14px, 4.6vw, 20px); }
+.show-fly .stamp::before { font-size: 26px; }
+.show-layer.show .show-fly .stamp { animation: bigIn .8s cubic-bezier(.3,1.5,.5,1) both, breathe 1.4s .8s ease-in-out infinite; }
+.show-layer.leaving .show-fly .stamp { animation: none; }
+@keyframes bigIn { from { transform: scale(0) rotate(calc(var(--r) - 540deg)); } to { transform: scale(1) rotate(var(--r)); } }
+@keyframes breathe { 0%,100% { transform: scale(1) rotate(var(--r)); } 50% { transform: scale(1.06) rotate(var(--r)); } }
+
+.walk-paw { position: absolute; font-size: 34px; animation: pawStep 1.4s ease-out forwards; }
+@keyframes pawStep {
+  0% { opacity: 0; transform: scale(.3) rotate(var(--rot)); }
+  20% { opacity: 1; transform: scale(1.15) rotate(var(--rot)); }
+  70% { opacity: .9; transform: scale(1) rotate(var(--rot)); }
+  100% { opacity: 0; transform: scale(1) rotate(var(--rot)); }
+}
+
+/* =========================================================
+   おとなメニュー（タイトル長押しで開く）
+   ========================================================= */
+h1 { transition: transform .2s; }
+h1.holding { transform: scale(.88); transition: transform 1.9s linear; }
+.panel h3 { font-size: 22px; font-weight: 800; margin-bottom: 8px; }
+.panel small { font-size: 13px; opacity: .7; }
+.menu-btn {
+  display: block; width: 100%; height: 52px; margin-top: 10px; border: 0; border-radius: 16px;
+  font-size: 16px; font-weight: 800; background: #f3eefb; color: #4a2196;
+}
+.menu-btn.danger { background: #ffe3ea; color: #d93d75; }
+.menu-btn.cancel { background: none; color: #999; }
+
+/* 紙吹雪用キャンバス（タップは下に通す） */
+#fx { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 30; pointer-events: none; }
+
+/* =========================================================
+   テーマ：garden（チューリップ）／ meadow（メリーさんのひつじ）
+   ========================================================= */
+.garden { --accent: #ff5a5f; --glow: rgba(255,90,95,.45); --edge: #d94045; --ring: #ff8a80; }
+.meadow { --accent: #3a95d6; --glow: rgba(74,163,223,.45); --edge: #2b78b0; --ring: #7cc4f5; }
+
+/* 背景 */
+.bg-garden { background: linear-gradient(180deg, #dff4ff 0%, #fffbe8 55%, #e3f7d3 100%); }
+.flowerbed {
+  position: absolute; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom) - 4px);
+  display: flex; justify-content: space-around; font-size: 34px; opacity: .6;
+}
+.flowerbed span { display: inline-block; transform-origin: 50% 100%; animation: sway 3s ease-in-out infinite; }
+@keyframes sway { 0%,100% { transform: rotate(-7deg); } 50% { transform: rotate(7deg); } }
+.drift { position: absolute; bottom: -60px; animation: floatUp linear infinite; }
+
+.bg-meadow { background: linear-gradient(180deg, #a9dcff 0%, #dff2ff 60%, #eefaff 100%); }
+.hill {
+  position: absolute; left: -25%; right: -25%; bottom: -32vh; height: 58vh; border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 15%, #b6e8a0, #7cc96a 70%);
+}
+.cloud { position: absolute; left: 0; animation: driftX linear infinite; opacity: .95; }
+@keyframes driftX { from { transform: translateX(-30vw); } to { transform: translateX(130vw); } }
+
+/* カード */
+.garden .card, .meadow .card { background: #fff; border: 3px solid; }
+.garden .card { border-color: #b8e6a1; box-shadow: 0 14px 30px rgba(95,170,80,.22); }
+.meadow .card { border-color: #bfe3fb; box-shadow: 0 14px 30px rgba(74,163,223,.22); }
+.garden .sub { color: #5aa469; }
+.meadow .sub { color: #5c9fd0; }
+.garden h1 { color: #ff5a5f; }
+.meadow h1 { color: #3a95d6; }
+.garden .head-icon { animation: sway 2.4s ease-in-out infinite; transform-origin: 50% 100%; }
+.meadow .head-icon { animation: bounce 1.4s ease-in-out infinite; }
+.garden .medals { color: #5aa469; }
+.meadow .medals { color: #5c9fd0; }
+.garden .msg { color: #3f8f4f; }
+.meadow .msg { color: #3a6f99; }
+.garden .undo { color: #3f8f4f; }
+.meadow .undo { color: #3a6f99; }
+
+/* 枠 */
+.garden .slot { border: 3px dashed #ffb3a7; background: #fff7f5; }
+.meadow .slot { border: 3px dashed #a9d6f5; background: #f3faff; }
+.garden .goal { background: #f2fbea; border: 3px solid #b8e6a1; }
+.meadow .goal { background: #eef8ff; border: 3px solid #bfe3fb; }
+
+/* スタンプ */
+.garden .stamp {
+  background: radial-gradient(circle at 35% 30%, #fff6c4, #ffd54d 72%);
+  border: 3px solid #fff;
+  box-shadow: inset 0 0 0 3px #ffc23d, inset 0 0 0 5px rgba(255,255,255,.8), 0 5px 12px rgba(230,160,0,.35);
+}
+.meadow .stamp {
+  background: radial-gradient(circle at 35% 30%, #c4e9ff, #4aa3df 72%);
+  border: 3px solid #fff;
+  box-shadow: inset 0 0 0 3px #4aa3df, inset 0 0 0 5px rgba(255,255,255,.75), 0 5px 12px rgba(74,163,223,.4);
+}
+.garden .stamp-text { color: #e0484d; }
+.meadow .stamp-text { color: #fff; }
+
+/* ボタン */
+.garden .play { background: linear-gradient(180deg, #ff9a90, #ff5a5f); color: #fff; text-shadow: 0 2px 0 rgba(0,0,0,.12); }
+.meadow .play { background: linear-gradient(180deg, #8fd0fa, #3a95d6); color: #fff; text-shadow: 0 2px 0 rgba(0,0,0,.12); }
+
+/* ごほうびタイム */
+.show-layer.garden { --ray: rgba(255,255,255,.65); --txt: #ff5a5f; --txt2: #3f8f4f; }
+.show-layer.meadow { --ray: rgba(255,255,255,.6);  --txt: #2b78b0; --txt2: #3a6f99; }
+.show-layer.garden .show-bg { background: radial-gradient(circle at 50% 45%, rgba(255,250,225,.96), rgba(200,240,175,.97) 75%); }
+.show-layer.meadow .show-bg { background: radial-gradient(circle at 50% 45%, rgba(235,248,255,.96), rgba(150,210,250,.97) 75%); }
+.hopper { position: absolute; left: 0; font-size: 56px; }
+.hopper span { display: inline-block; animation: hop .33s ease-in-out infinite; }
+@keyframes hop { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-36px) rotate(-8deg); } }
+
+/* おめでとう／おとなメニュー */
+.overlay[data-theme="garden"] .panel { background: linear-gradient(170deg, #f2fbea, #fff); border: 4px solid #ff8a80; color: #3f8f4f; }
+.overlay[data-theme="meadow"] .panel { background: linear-gradient(170deg, #e8f6ff, #fff); border: 4px solid #7cc4f5; color: #2b78b0; }

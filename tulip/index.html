@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>ピアノ スタンプカード（チューリップ）</title>
+<!-- ホーム画面に追加したとき、全画面のアプリとして開くための設定 -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="チューリップ">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;800&display=swap" rel="stylesheet">
+<!-- ?v=… を変えると、iPhoneが古いキャッシュではなく新しいファイルを読みに行く -->
+<link rel="stylesheet" href="../app.css?v=3">
+</head>
+<body>
+<script>
+  window.APP_CONFIG = {
+    storageKey: "piano-stamp-card-tulip-v1",   // もう1つのページとデータが混ざらないよう、別の名前にする
+    childName: "",
+    goal: 5,
+    cards: ["tulip", "sheep"],
+  };
+</script>
+<script src="../app.js?v=3"></script>
+</body>
+</html>
