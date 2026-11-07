@@ -349,31 +349,74 @@ function centerOf(el) {
   return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width };
 }
 
+/* 3つの登場パターン。同じのが続かないように、前回以外から選ぶ */
+const VARIANTS = ["spin", "drop", "gift"];
+let lastVariant = null;
+
 function showStamp(c, i) {
   return new Promise(resolve => {
     const st = state[c.id].stamps[i];
+    const variant = pick(VARIANTS.filter(v => v !== lastVariant));
+    lastVariant = variant;
+
     showCard = c;
-    showEl.className = `show-layer ${c.theme}`;
-    showFly.innerHTML = `<div class="stamp" style="--r:${st.r}deg">${c.svg}<span class="stamp-text">よくできました</span></div>`;
+    showEl.className = `show-layer ${c.theme} v-${variant}`;
+    showFly.innerHTML = `<div class="stamp" style="--r:${st.r}deg">${c.svg}<span class="stamp-text">よくできました</span></div>`
+      + (variant === "gift" ? `<div class="show-gift">🎁</div>` : "");
     $("showCount").textContent = `${i + 1}かいめ！`;
     $("showPraise").textContent = pick(PRAISE);
     void showEl.offsetWidth;           // リフローさせてからクラスを付けると、毎回アニメが最初から再生される
     showEl.classList.add("show");
-    sfx.jingle(i);                     // タップ処理の中で鳴らし始める（iOSの音の制約）
 
-    setTimeout(() => { const p = centerOf(showFly); fx.burst(p.x, p.y, c, 45, 11); }, 650);
+    // パターンごとの「タイムライン」：何ミリ秒後に何をするか
+    const at = (ms, fn) => setTimeout(fn, ms);
+    let reveal;                        // スタンプがはっきり見える瞬間
+    if (variant === "spin") {
+      reveal = 650;
+      sfx.jingle(i);
+      at(reveal, () => burstAtStamp(c, 45, 11));
+    }
+    if (variant === "drop") {
+      reveal = 560;
+      sfx.fall();
+      at(reveal, () => {
+        showEl.classList.add("quake");
+        showFly.insertAdjacentHTML("beforeend", `<div class="shock"></div><div class="shock late"></div>`);
+        burstAtStamp(c, 70, 14);
+        sfx.boom();
+      });
+      at(reveal + 150, () => sfx.jingle(i));
+    }
+    if (variant === "gift") {
+      reveal = 1600;
+      sfx.pop();
+      [650, 950, 1250].forEach(ms => at(ms, () => sfx.rattle()));
+      at(reveal, () => {
+        showEl.classList.add("opened");
+        burstAtStamp(c, 70, 13);
+        sfx.pop();
+        sfx.jingle(i);
+      });
+    }
+
     for (let k = 0; k < 7; k++) {      // スタンプのまわりでキラキラが順番にはじける
-      setTimeout(() => {
+      at(reveal + 300 + k * 320, () => {
         const p = centerOf(showFly), a = rand(0, Math.PI * 2), rad = p.w * 0.65;
         fx.burst(p.x + Math.cos(a) * rad, p.y + Math.sin(a) * rad, c, 7, 3.5);
-      }, 950 + k * 320);
+      });
     }
-    if (c.extra.type === "steps") walkSteps(c.extra);
-    if (c.extra.type === "hop") hopAcross(c.extra);
-    if (c.extra.type === "rain") setTimeout(() => fx.rain(c, 60), 300);
+    const extraAt = Math.max(0, reveal - 350);
+    if (c.extra.type === "steps") at(extraAt, () => walkSteps(c.extra));
+    if (c.extra.type === "hop") at(extraAt, () => hopAcross(c.extra));
+    if (c.extra.type === "rain") at(extraAt, () => fx.rain(c, 60));
 
-    setTimeout(() => flyToCard(c, i, resolve), 3300);
+    at(reveal + 2650, () => flyToCard(c, i, resolve));
   });
+}
+
+function burstAtStamp(c, count, power) {
+  const p = centerOf(showFly);
+  fx.burst(p.x, p.y, c, count, power);
 }
 
 /* 足あとがトコトコ並んでいく（ねこ） */
@@ -663,6 +706,19 @@ const sfx = (() => {
     o.connect(g).connect(a.destination);
     o.start(at); o.stop(at + dur + 0.05);
   }
+  // ノイズ（ザーッという音）を短く鳴らす。フィルタで「ドン」「ガタッ」などの質感を作る
+  function noise(at, dur, vol, freq, type = "lowpass") {
+    const a = ctx();
+    const buf = a.createBuffer(1, Math.floor(a.sampleRate * dur), a.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    const src = a.createBufferSource(), f = a.createBiquadFilter(), g = a.createGain();
+    src.buffer = buf; f.type = type; f.frequency.value = freq;
+    g.gain.setValueAtTime(vol, at);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+    src.connect(f).connect(g).connect(a.destination);
+    src.start(at);
+  }
   function piano(freq, at, dur = 1) {
     tone(freq, at, dur, "triangle", 0.22);
     tone(freq * 2, at, dur * 0.5, "sine", 0.05);   // 倍音を少し足す
@@ -684,6 +740,18 @@ const sfx = (() => {
     step(k) { tone(1200 + (k % 2) * 200, ctx().currentTime, 0.1, "sine", 0.06); },
     boing(k) { sweep(300 + (k % 2) * 80, 700 + (k % 2) * 120, ctx().currentTime, 0.22, 0.08); },
     whoosh() { sweep(400, 1600, ctx().currentTime, 0.45, 0.07); },
+    fall()   { sweep(1500, 300, ctx().currentTime, 0.55, 0.07); },          // ヒューッ
+    boom() {                                                                  // ドーン
+      const t = ctx().currentTime;
+      sweep(160, 40, t, 0.6, 0.6);
+      noise(t, 0.4, 0.35, 500);
+    },
+    rattle() {                                                                // ガタッ
+      const t = ctx().currentTime;
+      noise(t, 0.09, 0.18, 1800, "bandpass");
+      tone(260 + rand(0, 80), t, 0.08, "triangle", 0.1);
+    },
+    pop() { sweep(400, 1000, ctx().currentTime, 0.15, 0.12); },             // ポンッ
     stamp(i, delay) {
       const t = ctx().currentTime + delay;
       sweep(220, 60, t, 0.2, 0.5);                    // ポン
