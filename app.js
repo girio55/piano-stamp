@@ -6,7 +6,7 @@
    ========================================================= */
 (() => {
 const CONFIG = Object.assign(
-  { storageKey: "piano-stamp-card-v1", childName: "", goal: 5, cards: ["aladdin", "neko"] },
+  { storageKey: "piano-stamp-card-v1", childName: "", goal: 5, cards: ["aladdin", "neko"], recitalDate: "" },
   window.APP_CONFIG || {}
 );
 const GOAL = CONFIG.goal;
@@ -138,6 +138,24 @@ document.body.insertAdjacentHTML("afterbegin", `
     </div>
   </div>
 
+  <div class="stage" id="stage">
+    <div class="spot s1"></div><div class="spot s2"></div>
+    <div class="stage-content">
+      <div class="stage-title" id="stageTitle"></div>
+      <div class="cert" id="cert"></div>
+      <div class="stage-btns">
+        <button class="again" id="stageAgain">🎉 もういちど みる</button>
+        <button class="close" id="stageClose">とじる</button>
+      </div>
+    </div>
+    <div class="curtain l"></div><div class="curtain r"></div>
+    <div class="valance"></div>
+    <div class="curtain-label">
+      <div class="big">🎹 きょうは<br>はっぴょうかい 🎹</div>
+      <div class="tap">タップしてね ✨</div>
+    </div>
+  </div>
+
   <canvas id="fx"></canvas>
 `);
 
@@ -205,6 +223,7 @@ for (const c of CARDS) {
     <div class="actions">
       <button class="play"></button>
       <button class="undo">ひとつ もどす</button>
+      <button class="finale-btn" hidden>🎤 はっぴょうかい を みる</button>
     </div>`;
   pagesEl.appendChild(page);
   els[c.id] = {
@@ -215,6 +234,9 @@ for (const c of CARDS) {
   els[c.id].play.addEventListener("click", () => onPlay(c));
   els[c.id].undo.addEventListener("click", () => onUndo(c));
   setupHold(c);
+  const fb = page.querySelector(".finale-btn");
+  fb.hidden = !finaleOn();
+  fb.addEventListener("click", () => { if (!busy) { openStage(); runFinale(); } });
   render(c);
 }
 
@@ -477,6 +499,121 @@ showEl.addEventListener("pointerdown", e => {
 });
 
 /* =========================================================
+   はっぴょうかい（発表会の日のスペシャル演出）
+   幕が閉じた状態で表示 → タップで開幕（タップが音を鳴らすきっかけになる）
+   ========================================================= */
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function finaleOn() { return !!CONFIG.recitalDate && todayStr() >= CONFIG.recitalDate; }
+
+const stage = $("stage");
+let stageTimers = [];
+const FINALE_FX = { emojis: ["🎉", "⭐", "🎵", "💖", "🌟", "🎶"],
+  colors: ["#ffd23f", "#ff5c93", "#7cc4f5", "#8fd694", "#b28dff", "#ffffff", "#ff7b54"] };
+
+function openStage() {
+  stageTimers.forEach(clearTimeout); stageTimers = [];
+  const name = CONFIG.childName ? `${CONFIG.childName} ちゃん` : "がんばりやさん";
+  const d = new Date();
+  let total = 0;
+  const rows = CARDS.map(c => {
+    const s = state[c.id], n = s.cleared * GOAL + s.stamps.length;
+    total += n;
+    return `<div class="cert-row"><span>${c.icon} ${c.title}</span><span><b data-n="${n}">0</b> かい</span></div>`;
+  }).join("");
+
+  // 1文字ずつ span にして、順番に跳ねて出てくるようにする
+  $("stageTitle").innerHTML = [..."はっぴょうかい", "\n", ..."おめでとう！"].map((ch, k) =>
+    ch === "\n" ? "<br>" : `<span style="--k:${k}">${ch}</span>`).join("");
+
+  $("cert").innerHTML = `
+    <div class="cert-head">しょうじょう</div>
+    <div class="cert-award">🏆 がんばったで賞</div><br>
+    <div class="cert-name">${name}</div>
+    <div class="cert-body">まいにち ピアノの れんしゅうを<br>よく がんばりました。<br>はっぴょうかい おめでとう！</div>
+    <div class="cert-stats">${rows}</div>
+    <div class="cert-total">ぜんぶで <b data-n="${total}">0</b> かい れんしゅう したよ</div>
+    <div class="cert-date">${d.getFullYear()}ねん ${d.getMonth() + 1}がつ ${d.getDate()}にち</div>
+    <div class="cert-seal">🏅</div>`;
+
+  stage.className = "stage show";
+  state._finaleShown = todayStr();
+  saveState();
+}
+
+function runFinale() {
+  if (stage.classList.contains("rolling") || stage.classList.contains("open")) return;
+  const at = (ms, fn) => stageTimers.push(setTimeout(fn, ms));
+  const W = innerWidth, H = innerHeight;
+
+  // 1) ドラムロールで幕がふるえる
+  stage.classList.add("rolling", "lit");
+  sfx.drumroll(1.6);
+
+  // 2) シンバル！ 幕が開いて、花火・拍手・ファンファーレ
+  at(1600, () => {
+    stage.classList.remove("rolling");
+    stage.classList.add("open");
+    sfx.cymbal();
+    sfx.grandFanfare();
+    sfx.applause(5);
+  });
+  for (let k = 0; k < 16; k++) {
+    at(1800 + k * 380, () => {
+      fx.firework(rand(0.15, 0.85) * W, rand(0.1, 0.38) * H, FINALE_FX);
+      if (k % 3 === 0) sfx.pop();
+    });
+  }
+  at(1900, () => fx.rain(FINALE_FX, 220));
+
+  // 3) 賞状がくるっと登場 → 数字がカウントアップ
+  at(3400, () => { stage.classList.add("cert-in"); sfx.whoosh(); });
+  at(4200, () => countUp(1300));
+
+  // 4) メダルの判子をドンッ
+  at(5700, () => {
+    stage.classList.add("sealed");
+    at(380, () => {
+      sfx.boom();
+      const r = stage.querySelector(".cert-seal").getBoundingClientRect();
+      fx.burst(r.left + r.width / 2, r.top + r.height / 2, FINALE_FX, 60, 12);
+    });
+  });
+  at(6400, () => { stage.classList.add("done"); fx.rain(FINALE_FX, 120); });
+}
+
+function countUp(dur) {
+  const nums = [...stage.querySelectorAll("[data-n]")];
+  const t0 = performance.now();
+  let lastTick = 0;
+  (function step(now) {
+    const k = Math.min(1, (now - t0) / dur);
+    const e = 1 - Math.pow(1 - k, 3);          // 最後にゆっくりになる（ease-out）
+    nums.forEach(b => { b.textContent = Math.round(Number(b.dataset.n) * e); });
+    if (now - lastTick > 70 && k < 1) { sfx.tick(); lastTick = now; }
+    if (k < 1) requestAnimationFrame(step);
+    else sfx.arpeggio();
+  })(t0);
+}
+
+stage.addEventListener("click", e => {
+  if (e.target.closest(".stage-btns")) return;
+  runFinale();
+});
+$("stageAgain").addEventListener("click", () => { openStage(); setTimeout(runFinale, 50); });
+$("stageClose").addEventListener("click", () => {
+  stageTimers.forEach(clearTimeout); stageTimers = [];
+  stage.className = "stage";
+});
+
+// 発表会の当日、最初に開いたときは自動で幕を表示する（1日1回）
+if (CONFIG.recitalDate && todayStr() === CONFIG.recitalDate && state._finaleShown !== todayStr()) {
+  requestAnimationFrame(openStage);
+}
+
+/* =========================================================
    おめでとう画面
    ========================================================= */
 const overlay = $("overlay");
@@ -604,6 +741,24 @@ const fx = (() => {
     start();
   }
 
+  // 打ち上げ花火：下から玉が上がって、上でパッと開く
+  function firework(x, y, c) {
+    const g = 0.18;
+    parts.push({ kind: "rocket", x, y: H + 10, vx: rand(-0.6, 0.6), vy: -Math.sqrt(2 * g * (H + 10 - y)),
+      g, drag: 1, ty: y, life: 0, max: 400, color: pick(c.colors), c, size: 3 });
+    start();
+  }
+  function explode(p) {
+    const n = 70, base = rand(3.5, 6);
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2, sp = base * rand(0.85, 1.05);
+      parts.push({ kind: "dot", x: p.x, y: p.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+        g: 0.06, drag: 0.965, life: 0, max: rand(60, 90), color: Math.random() < 0.8 ? p.color : "#ffffff",
+        size: rand(2, 3.4), rot: 0, vr: 0, sway: 0, swayAmp: 0 });
+    }
+    for (let i = 0; i < 8; i++) parts.push(make(p.x, p.y, rand(-4, 4), rand(-4, 2), p.c, { emojiRate: 1, g: 0.08 }));
+  }
+
   function start() {
     if (running) return;
     running = true; last = performance.now();
@@ -614,8 +769,33 @@ const fx = (() => {
     // dt: 60fps基準で何フレーム分経ったか。120HzのiPhoneでも同じ速さになる
     const dt = Math.min((now - last) / 16.67, 3); last = now;
     ctx.clearRect(0, 0, W, H);
-    parts = parts.filter(p => p.life < p.max && p.y < H + 60);
-    for (const p of parts) {
+    parts = parts.filter(p => p.life < p.max && (p.y < H + 60 || p.kind === "rocket"));
+    const spawned = [];
+    const all = parts;
+    parts = spawned;                 // 爆発で増える粒は spawned に入り、最後に合流させる
+    for (const p of all) {
+      if (p.kind === "rocket") {
+        p.vy += p.g * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.life += dt;
+        if (p.vy >= -1 || p.y <= p.ty) { p.life = p.max; explode(p); continue; }
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        ctx.strokeStyle = p.color; ctx.lineWidth = 3; ctx.lineCap = "round";
+        ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - p.vx * 4, p.y - p.vy * 4); ctx.stroke();
+        ctx.restore();
+        continue;
+      }
+      if (p.kind === "dot") {
+        p.vx *= Math.pow(p.drag, dt); p.vy = p.vy * Math.pow(p.drag, dt) + p.g * dt;
+        p.x += p.vx * dt; p.y += p.vy * dt; p.life += dt;
+        const t = p.life / p.max;
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";   // 重なると明るくなる＝光っぽく見える
+        ctx.globalAlpha = Math.max(0, 1 - t) * (Math.random() < 0.15 && t > 0.5 ? 0.3 : 1);   // 終わりぎわにチカチカ
+        ctx.fillStyle = p.color;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+        continue;
+      }
       p.vx *= Math.pow(p.drag, dt); p.vy = p.vy * Math.pow(p.drag, dt) + p.g * dt;
       p.x += (p.vx + Math.sin(p.life * 0.06 + p.sway) * p.swayAmp) * dt;
       p.y += p.vy * dt; p.rot += p.vr * dt; p.life += dt;
@@ -634,11 +814,12 @@ const fx = (() => {
       }
       ctx.restore();
     }
+    parts = all.concat(spawned);
     if (parts.length) requestAnimationFrame(tick);
     else { running = false; ctx.clearRect(0, 0, W, H); }
   }
 
-  return { burst, rain };
+  return { burst, rain, firework };
 })();
 
 /* =========================================================
@@ -752,6 +933,28 @@ const sfx = (() => {
       tone(260 + rand(0, 80), t, 0.08, "triangle", 0.1);
     },
     pop() { sweep(400, 1000, ctx().currentTime, 0.15, 0.12); },             // ポンッ
+    tick() { tone(1800, ctx().currentTime, 0.04, "square", 0.025); },        // カウントアップのカチカチ
+    drumroll(dur) {                                                           // ドロロロロ…（だんだん大きく）
+      const t = ctx().currentTime;
+      for (let x = 0; x < dur; x += 0.045) noise(t + x, 0.06, 0.05 + 0.3 * (x / dur), 900);
+    },
+    cymbal() { const t = ctx().currentTime; noise(t, 1.8, 0.28, 5000, "highpass"); sweep(160, 50, t, 0.5, 0.5); },
+    applause(dur) {                                                           // 拍手：短いノイズをたくさんランダムに
+      const t = ctx().currentTime;
+      for (let i = 0; i < dur * 45; i++) {
+        const off = rand(0, dur);
+        noise(t + off, 0.035, rand(0.03, 0.09) * (1 - 0.6 * off / dur), rand(1200, 2600), "bandpass");
+      }
+    },
+    grandFanfare() {                                                          // 発表会用のオリジナルファンファーレ
+      const t = ctx().currentTime + 0.05;
+      const mel = [[0, 523.25, .2], [.15, 659.25, .2], [.3, 783.99, .2], [.45, 1046.5, .6],
+                   [.9, 987.77, .2], [1.05, 1046.5, .2], [1.2, 1174.66, .2], [1.35, 1318.5, .9],
+                   [2.0, 1174.66, .2], [2.15, 1318.5, .2], [2.3, 1567.98, 2.2]];
+      mel.forEach(([o, f, d]) => piano(f, t + o, d));
+      [[0, [130.81, 196]], [.9, [174.61, 261.63]], [1.35, [196, 293.66]], [2.3, [130.81, 261.63, 329.63, 392]]]
+        .forEach(([o, fs]) => fs.forEach(f => piano(f, t + o, o === 2.3 ? 2.6 : 0.9)));
+    },
     stamp(i, delay) {
       const t = ctx().currentTime + delay;
       sweep(220, 60, t, 0.2, 0.5);                    // ポン
