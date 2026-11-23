@@ -59,6 +59,32 @@ const SVG = {
   </svg>`,
 };
 
+SVG.squirrel = `<svg viewBox="0 0 100 100" aria-hidden="true">
+  <path d="M60 80 Q92 78 90 48 Q88 18 66 18 Q50 18 52 33 Q54 45 66 43 Q75 41 73 52 Q71 64 56 68 Z" fill="#fff"/>
+  <path d="M64 30 Q70 28 74 34" fill="none" stroke="#f3a35c" stroke-width="3" stroke-linecap="round"/>
+  <ellipse cx="44" cy="64" rx="16" ry="18" fill="#fff"/>
+  <path d="M29 31 L31 16 L41 28 Z" fill="#fff"/>
+  <circle cx="37" cy="41" r="15" fill="#fff"/>
+  <circle cx="33" cy="39" r="3" fill="#7a3f12"/>
+  <circle cx="34" cy="38" r="1" fill="#fff"/>
+  <circle cx="23" cy="44" r="2.4" fill="#7a3f12"/>
+  <circle cx="31" cy="48" r="3.4" fill="#ffb3a0"/>
+  <ellipse cx="38" cy="66" rx="7" ry="8" fill="#a65a22"/>
+  <path d="M30 61 Q38 52 46 61 Z" fill="#7a3f12"/>
+  <path d="M38 55 L38 51" stroke="#7a3f12" stroke-width="2.5" stroke-linecap="round"/>
+</svg>`;
+SVG.fox = `<svg viewBox="0 0 100 100" aria-hidden="true">
+  <path d="M20 46 L27 10 L48 32 Z" fill="#f28c28"/><path d="M80 46 L73 10 L52 32 Z" fill="#f28c28"/>
+  <path d="M27 37 L30 19 L41 31 Z" fill="#5a3a1a"/><path d="M73 37 L70 19 L59 31 Z" fill="#5a3a1a"/>
+  <path d="M16 42 Q50 20 84 42 Q82 68 50 86 Q18 68 16 42 Z" fill="#f28c28"/>
+  <path d="M20 52 Q36 58 50 86 Q28 76 20 52 Z" fill="#fff"/><path d="M80 52 Q64 58 50 86 Q72 76 80 52 Z" fill="#fff"/>
+  <g fill="none" stroke="#5a3a1a" stroke-width="4" stroke-linecap="round">
+    <path d="M33 50 Q38 44 43 50"/><path d="M57 50 Q62 44 67 50"/>
+  </g>
+  <ellipse cx="50" cy="79" rx="4.5" ry="3.5" fill="#5a3a1a"/>
+  <circle cx="30" cy="60" r="3.5" fill="#ffb3a0"/><circle cx="70" cy="60" r="3.5" fill="#ffb3a0"/>
+</svg>`;
+
 /* ---------- 曲（カード）のカタログ ----------
    id は保存データのキーになるので、あとから変えないこと */
 const CARD_LIB = {
@@ -74,6 +100,12 @@ const CARD_LIB = {
   sheep: { title: "メリーさんのひつじ", icon: "🐑", theme: "meadow", svg: SVG.sheep,
     emojis: ["🐑", "☁️", "🌼", "🎵"], colors: ["#4aa3df", "#bfe6ff", "#ffd54d", "#ffffff", "#8fd694"],
     extra: { type: "hop", char: "🐑" } },
+  risu: { title: "やまのおんがくか", icon: "🐿️", theme: "forest", svg: SVG.squirrel,
+    emojis: ["🐿️", "🌰", "🍂", "🎻"], colors: ["#e07b24", "#ffc58a", "#8a4b1e", "#8fd694", "#ffffff"],
+    extra: { type: "hop", char: "🐿️" } },
+  kitsune: { title: "こぎつね", icon: "🦊", theme: "dusk", svg: SVG.fox,
+    emojis: ["🦊", "🍁", "🌸", "✨"], colors: ["#f28c28", "#ff9eaa", "#ffd166", "#b28dff", "#ffffff"],
+    extra: { type: "steps", char: "🐾", rot: 80 } },
 };
 const CARDS = CONFIG.cards.map(id => ({ id, ...CARD_LIB[id] }));
 
@@ -191,6 +223,33 @@ function decorate(bg, theme) {
       bg.appendChild(c);
     }
     floaters(bg, ["🌼"], 5, 0.45);
+  }
+  if (theme === "forest") {
+    fallers(bg, ["🍂", "🍁", "🌰"], 10, 0.6);
+    bg.insertAdjacentHTML("beforeend",
+      `<div class="flowerbed trees">${Array.from({ length: 7 }, (_, i) =>
+        `<span style="animation-delay:${-i * 0.5}s">${i % 2 ? "🌳" : "🌲"}</span>`).join("")}</div>`);
+  }
+  if (theme === "dusk") {
+    bg.insertAdjacentHTML("beforeend", `<div class="mountain far"></div><div class="mountain near"></div>`);
+    fallers(bg, ["🍁", "🍂"], 9, 0.55);
+    for (let i = 0; i < 25; i++) {
+      const s = document.createElement("i");
+      s.className = "star";
+      s.style.cssText = `left:${rand(0, 100)}%;top:${rand(0, 30)}%;--s:${rand(1, 2.5)}px;animation-duration:${rand(2, 5)}s;animation-delay:${rand(-5, 0)}s`;
+      bg.appendChild(s);
+    }
+  }
+}
+/* 上から下へ、ひらひら落ちてくる飾り（落ち葉） */
+function fallers(bg, chars, n, opacity) {
+  for (let i = 0; i < n; i++) {
+    const p = document.createElement("span");
+    p.className = "fall";
+    p.textContent = pick(chars);
+    const dur = rand(10, 18);
+    p.style.cssText = `left:${rand(0, 95)}%;font-size:${rand(18, 34)}px;opacity:${opacity};animation-duration:${dur}s;animation-delay:${-dur * Math.random()}s`;
+    bg.appendChild(p);
   }
 }
 function floaters(bg, chars, n, opacity) {

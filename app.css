@@ -635,3 +635,80 @@ h1.holding { transform: scale(.88); transition: transform 1.9s linear; }
 .stage-btns button { flex: 1; height: 54px; border: 0; border-radius: 999px; font-size: 16px; font-weight: 800; }
 .stage-btns .again { background: linear-gradient(180deg, #ffe680, #ffbf1f); color: #4a2196; box-shadow: 0 5px 0 #c98a00; }
 .stage-btns .close { background: rgba(255,255,255,.16); color: #fff; }
+
+/* =========================================================
+   テーマ：forest（やまのおんがくか）／ dusk（こぎつね）
+   ========================================================= */
+.forest { --accent: #e07b24; --glow: rgba(224,123,36,.45); --edge: #b85f15; --ring: #ffb36b; }
+.dusk   { --accent: #d9681e; --glow: rgba(217,104,30,.45); --edge: #a84d12; --ring: #ffa86b; }
+
+/* 背景 */
+.bg-forest { background: linear-gradient(180deg, #fff4dc 0%, #ffe3bf 55%, #d9ecc0 100%); }
+.trees { font-size: 42px; opacity: .55; }
+.bg-dusk { background: linear-gradient(180deg, #7b5aa6 0%, #ff9eaa 45%, #ffcf9e 75%, #ffe3c2 100%); }
+.mountain { position: absolute; left: 0; right: 0; bottom: 0; }
+.mountain.far {
+  height: 34vh; background: #a77bca; opacity: .55;
+  clip-path: polygon(0 100%, 0 45%, 14% 15%, 28% 48%, 44% 8%, 60% 46%, 76% 12%, 100% 50%, 100% 100%);
+}
+.mountain.near {
+  height: 22vh; background: #6a4c93; opacity: .75;
+  clip-path: polygon(0 100%, 0 40%, 20% 10%, 38% 52%, 55% 20%, 72% 55%, 88% 18%, 100% 38%, 100% 100%);
+}
+.fall { position: absolute; top: -60px; animation: fallDown linear infinite; }
+@keyframes fallDown {
+  0%   { transform: translate(0, 0) rotate(0); }
+  50%  { transform: translate(30px, 60vh) rotate(180deg); }
+  100% { transform: translate(-10px, 125vh) rotate(360deg); }
+}
+
+/* カード */
+.forest .card, .dusk .card { background: #fff; border: 3px solid; }
+.forest .card { border-color: #f3c98b; box-shadow: 0 14px 30px rgba(224,123,36,.22); }
+.dusk .card { border-color: #ffc9a8; box-shadow: 0 14px 30px rgba(106,76,147,.3); }
+.forest .sub { color: #a8723c; }
+.dusk .sub { color: #a47bc0; }
+.forest h1 { color: #e07b24; }
+.dusk h1 { color: #d9681e; }
+.forest .head-icon { animation: bounce 1.3s ease-in-out infinite; }
+.dusk .head-icon { animation: wiggle 1.8s ease-in-out infinite; }
+.forest .medals, .forest .msg { color: #8a4b1e; }
+.dusk .medals { color: #a47bc0; }
+.dusk .msg { color: #6a4c93; }
+.forest .undo { color: #8a4b1e; }
+.dusk .undo { color: #fff; opacity: .8; }
+
+/* 枠 */
+.forest .slot { border: 3px dashed #f3c98b; background: #fff8ee; }
+.dusk .slot { border: 3px dashed #ffc0a0; background: #fff6f0; }
+.forest .goal { background: #fff3e0; border: 3px solid #f3c98b; }
+.dusk .goal { background: #f6efff; border: 3px solid #d9c2ee; }
+
+/* スタンプ */
+.forest .stamp {
+  background: radial-gradient(circle at 35% 30%, #ffd2a1, #f08a3c 72%);
+  border: 3px solid #fff;
+  box-shadow: inset 0 0 0 3px #f08a3c, inset 0 0 0 5px rgba(255,255,255,.75), 0 5px 12px rgba(224,123,36,.4);
+}
+.dusk .stamp {
+  background: radial-gradient(circle at 35% 30%, #fffaf0, #ffe0b0 72%);
+  border: 3px solid #f28c28;
+  box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 5px rgba(242,140,40,.6), 0 5px 12px rgba(106,76,147,.35);
+}
+.forest .stamp-text { color: #fff; }
+.dusk .stamp-text { color: #d9681e; }
+
+/* ボタン */
+.forest .play { background: linear-gradient(180deg, #ffb36b, #e07b24); color: #fff; text-shadow: 0 2px 0 rgba(0,0,0,.12); }
+.dusk .play { background: linear-gradient(180deg, #ffa86b, #e8692a); color: #fff; text-shadow: 0 2px 0 rgba(0,0,0,.12); }
+
+/* ごほうびタイム */
+.show-layer.forest { --ray: rgba(255,255,255,.6); --txt: #e07b24; --txt2: #8a4b1e; }
+.show-layer.dusk   { --ray: rgba(255,230,200,.35); --txt: #ffd166; --txt2: #fff; }
+.show-layer.forest .show-bg { background: radial-gradient(circle at 50% 45%, rgba(255,246,228,.96), rgba(255,200,140,.97) 75%); }
+.show-layer.dusk   .show-bg { background: radial-gradient(circle at 50% 45%, rgba(255,160,150,.95), rgba(90,60,140,.97) 75%); }
+.show-layer.dusk .show-praise { text-shadow: 0 0 16px rgba(255,180,80,.8); }
+
+/* おめでとう／おとなメニュー */
+.overlay[data-theme="forest"] .panel { background: linear-gradient(170deg, #fff3e0, #fff); border: 4px solid #ffb36b; color: #8a4b1e; }
+.overlay[data-theme="dusk"] .panel { background: linear-gradient(170deg, #f6efff, #fff); border: 4px solid #ffa86b; color: #6a4c93; }
