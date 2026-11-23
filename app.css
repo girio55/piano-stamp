@@ -788,10 +788,10 @@ h1.holding { transform: scale(.88); transition: transform 1.9s linear; }
 .token {
   position: absolute; z-index: 3; width: 25%; height: 25%; display: grid; place-items: center;
   font-size: clamp(30px, 10vw, 44px); pointer-events: none;
-  transition: left .3s cubic-bezier(.4,0,.2,1), top .3s cubic-bezier(.4,0,.2,1);
+  transition: left .45s cubic-bezier(.4,0,.2,1), top .45s cubic-bezier(.4,0,.2,1);
   filter: drop-shadow(0 4px 3px rgba(0,0,0,.25));
 }
-.token.hop > .pet { animation: tokenHop .33s ease-out; }
+.token.hop > .pet { animation: tokenHop .5s ease-out; }
 @keyframes tokenHop { 0% { transform: translateY(0) scale(1); } 45% { transform: translateY(-26px) scale(1.1); } 80% { transform: translateY(2px) scale(1.12, .88); } 100% { transform: none; } }
 .token.munch > .pet { animation: munch .25s ease-in-out 6; }
 @keyframes munch { 50% { transform: scale(1.15, .9); } }
@@ -837,14 +837,14 @@ h1.holding { transform: scale(.88); transition: transform 1.9s linear; }
 
 .grow-pet { position: absolute; inset: 0; display: grid; place-items: center; font-size: min(40vw, 160px); }
 .grow-pet .egg { width: .8em; }
-.grow-pet.shaking > .pet { animation: hatchShake 1.5s ease-in both; transform-origin: 50% 90%; }
+.grow-pet.shaking > .pet { animation: hatchShake 2.4s ease-in both; transform-origin: 50% 90%; }
 @keyframes hatchShake {
   0%,100% { transform: rotate(0); } 10% { transform: rotate(-8deg); } 20% { transform: rotate(8deg); }
   35% { transform: rotate(-12deg) scale(1.03); } 45% { transform: rotate(12deg) scale(1.03); }
   60% { transform: rotate(-16deg) scale(1.07); } 70% { transform: rotate(16deg) scale(1.07); }
   85% { transform: rotate(-6deg) scale(1.12); } 92% { transform: rotate(6deg) scale(1.15); }
 }
-.grow-pet.glowing > .pet { animation: evolve 1.5s ease-in both; }
+.grow-pet.glowing > .pet { animation: evolve 2.1s ease-in both; }
 @keyframes evolve {
   0% { filter: none; transform: scale(1); }
   30% { filter: brightness(2.2); transform: scale(1.1); } 40% { filter: none; transform: scale(.95); }

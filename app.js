@@ -18,8 +18,8 @@ const GOAL = 15;                        // マスは 0（スタート）〜 15�
 const COLS = 4;                         // 4×4 に並べて、行ごとに向きを変える（ジグザグ）
 const DICE_MAX = 3;                     // サイコロは 1〜3。1周 だいたい7〜8回でゴール
 const STAGE_AT = [0, 5, 10, GOAL];      // ここを越えると育つ：たまご → あかちゃん → こども → おとな
-const EVENTS = { 3: "star", 5: "warp", 7: "treat", 10: "star", 12: "warp", 13: "treat" };
-const EVENT_ICON = { star: "⭐", warp: "🌀", treat: "🎁" };
+const EVENTS = { 3: "star", 7: "treat", 10: "star", 13: "treat" };   // 止まると1つだけ良いことが起きる（戻る・飛ぶマスはなし）
+const EVENT_ICON = { star: "⭐", treat: "🎁" };
 const TREATS = ["🍓", "🍰", "🍩", "🍭", "🍎", "🧁", "🍪", "🍮"];
 
 /* ---------- うまれてくる なかま ----------
@@ -192,6 +192,7 @@ document.body.insertAdjacentHTML("afterbegin", `
     <div class="panel">
       <h3>🔧 おとなメニュー</h3>
       <p id="menuText"></p>
+      <button class="menu-btn" data-act="voice" id="voiceBtn"></button>
       <button class="menu-btn" data-act="restart">すごろくを さいしょから</button>
       <button class="menu-btn" data-act="finale" ${CONFIG.recitalDate ? "" : "hidden"}>🎤 はっぴょうかいを みる</button>
       <button class="menu-btn danger" data-act="all">きろくを ぜんぶ消す</button>
@@ -404,7 +405,9 @@ document.querySelectorAll(".song").forEach(b => b.addEventListener("click", () =
 async function onPlay(c) {
   if (busy) return;
   busy = true;
+  document.body.dataset.busy = "1";      // 演出中のしるし（テストや見た目の確認用）
   disarmUndo();
+  voice.stop();
   setTheme(c);
 
   // --- 先に結果を全部決めて保存する（途中でアプリを閉じても記録が消えない）---
@@ -412,7 +415,7 @@ async function onPlay(c) {
   const from = state.pos;
   const to = Math.min(GOAL, from + roll);
   const event = to < GOAL ? EVENTS[to] : null;
-  const final = event === "warp" ? Math.min(GOAL, to + 2) : to;
+  const final = to;
   state.totals[c.id] = (state.totals[c.id] || 0) + 1;
   state.lastSong = c.id;
   state.pos = final;
@@ -427,9 +430,9 @@ async function onPlay(c) {
   // --- ここから演出 ---
   const stage0 = stageOf(from);
   render({ pos: from });
-  await rollDice(c, roll);
-  await walk(c, from, to, stage0);
-  if (event) await doEvent(c, event, to, final, stage0);
+  await rollDice(c, roll, `${c.title}、ひけたね！ サイコロ、ころころ`);
+  await walk(c, from, to);
+  if (event) await doEvent(c, event, to);
   const stage1 = stageOf(final);
   if (stage1 > stage0) await growShow(c, stage0, stage1);
   render();
@@ -438,75 +441,71 @@ async function onPlay(c) {
     newEgg();
   }
   busy = false;
+  document.body.dataset.busy = "0";
 }
 
 /* --- 1) サイコロ --- */
-function rollDice(c, roll) {
-  return new Promise(resolve => {
-    openShow(c, "dice", "サイコロ ころころ…");
-    const die = document.createElement("div");
-    die.className = "die rolling";
-    die.innerHTML = Array.from({ length: 9 }, (_, k) => `<i class="pip p${k + 1}"></i>`).join("");
-    die.dataset.f = 1;
-    showFly.appendChild(die);
-    sfx.whoosh();
+const NUM = ["", "いち", "に", "さん"];
+async function rollDice(c, roll, intro) {
+  openShow(c, "dice", "ころころ…");
+  const die = document.createElement("div");
+  die.className = "die rolling";
+  die.innerHTML = Array.from({ length: 9 }, (_, k) => `<i class="pip p${k + 1}"></i>`).join("");
+  die.dataset.f = 1;
+  showFly.appendChild(die);
+  sfx.whoosh();
+  const intro_ = voice.say(intro);   // ← ここはまだタップの処理の中なので、iOSでも声が出せる
 
-    // 0.07秒ごとに目を変えて「ころころ」感を出す
-    const spin = setInterval(() => { die.dataset.f = 1 + Math.floor(Math.random() * DICE_MAX); sfx.tick(); }, 70);
-    setTimeout(() => {
-      clearInterval(spin);
-      die.dataset.f = roll;
-      die.classList.remove("rolling");
-      die.classList.add("landed");
-      $("showPraise").textContent = `${roll}マス すすむ！`;
-      showEl.classList.add("rolled");
-      burstAt(showFly, c, 35, 9);
-      sfx.count(roll);
-    }, 1150);
-    setTimeout(() => closeShow(resolve), 2300);
-  });
+  // 0.09秒ごとに目を変えて「ころころ」感を出す。声が言い終わるまで（最低1.8秒）転がす
+  const spin = setInterval(() => { die.dataset.f = 1 + Math.floor(Math.random() * DICE_MAX); sfx.tick(); }, 90);
+  await hold(1800, intro_);
+  clearInterval(spin);
+
+  die.dataset.f = roll;
+  die.classList.remove("rolling");
+  die.classList.add("landed");
+  $("showPraise").textContent = `${roll}マス！`;
+  showEl.classList.add("rolled");
+  burstAt(showFly, c, 35, 9);
+  sfx.count(roll);
+  await hold(2000, voice.say(`${NUM[roll]}マス すすむよ`));
+  await closeShow();
 }
 
-/* --- 2) コマを1マスずつ進める --- */
-async function walk(c, from, to, stage) {
-  for (let p = from + 1; p <= to; p++) {
+/* --- 2) コマを1マスずつ進める（「いち、に、さん」と数えながら） --- */
+async function walk(c, from, to) {
+  for (let p = from + 1, k = 1; p <= to; p++, k++) {
     placeToken(p, true);
     sfx.step(p);
-    await wait(340);
+    await hold(750, voice.say(NUM[k]));
   }
-  const sq = boardEl.querySelector(`[data-i="${Math.min(to, GOAL)}"]`);
-  burstAt(sq, c, 10, 3);
-  await wait(150);
+  burstAt(boardEl.querySelector(`[data-i="${Math.min(to, GOAL)}"]`), c, 10, 3);
+  await wait(400);
 }
 
-/* --- 3) マスのイベント --- */
-async function doEvent(c, event, at, final, stage) {
+/* --- 3) マスのイベント（文字は短く、内容は声で） --- */
+async function doEvent(c, event, at) {
   const sq = boardEl.querySelector(`[data-i="${at}"]`);
   if (event === "star") {
-    toast(c, "⭐ キラキラ ボーナス！");
+    toast(c, "⭐ キラキラ！");
     const r = boardEl.getBoundingClientRect();
     for (let k = 0; k < 3; k++) {
-      setTimeout(() => { fx.firework(rand(r.left + 30, r.right - 30), rand(r.top - 40, r.top + r.height / 2), c); sfx.sparkle(); }, k * 300);
+      setTimeout(() => { fx.firework(rand(r.left + 30, r.right - 30), rand(r.top - 40, r.top + r.height / 2), c); sfx.sparkle(); }, k * 500);
     }
-    await wait(1700);
+    await hold(2800, voice.say("キラキラ ボーナス！ やったね"));
   }
   if (event === "treat") {
     const t = pick(TREATS);
-    toast(c, `🎁 おやつ ${t} ゲット！<br><small>もぐもぐ… おいしい！</small>`);
+    toast(c, `${t} もぐもぐ！`);
     const tok = boardEl.querySelector(".token");
     tok.classList.add("munch");
-    [0, 250, 500].forEach(ms => setTimeout(() => sfx.step(ms), ms + 300));
+    [0, 400, 800].forEach(ms => setTimeout(() => sfx.step(ms), ms + 300));
     burstAt(sq, { emojis: [t, "💖"], colors: c.colors }, 14, 5);
-    await wait(1700);
+    await hold(2800, voice.say("おやつだ！ もぐもぐ、おいしいね"));
     tok.classList.remove("munch");
   }
-  if (event === "warp") {
-    toast(c, "🌀 ワープ！ 2マス すすむ");
-    sfx.whoosh();
-    await wait(800);
-    await walk(c, at, final, stage);
-  }
   hideToast();
+  await wait(300);
 }
 function toast(c, html) {
   const t = boardEl.querySelector(".toast");
@@ -516,37 +515,38 @@ function toast(c, html) {
 function hideToast() { boardEl.querySelector(".toast").classList.remove("show"); }
 
 /* --- 4) 育つ演出（うまれる／おおきくなる／おとなになる）--- */
-function growShow(c, from, to) {
-  return new Promise(resolve => {
-    const sp = SPECIES[state.species];
-    const title = to === 1 ? "あれれ…？ たまごが…" : to === 2 ? "ぐんぐん…！" : "わあ…！ ひかってる！";
-    openShow(c, "grow", title);
-    const holder = document.createElement("div");
-    holder.className = "grow-pet";
-    holder.innerHTML = to === 1 ? petHTML(state.species, 0, 4) : petHTML(state.species, from);
-    showFly.appendChild(holder);
+async function growShow(c, from, to) {
+  const sp = SPECIES[state.species];
+  openShow(c, "grow", to === 1 ? "あれれ…？" : "わあ…！");
+  const holder = document.createElement("div");
+  holder.className = "grow-pet";
+  holder.innerHTML = to === 1 ? petHTML(state.species, 0, 4) : petHTML(state.species, from);
+  showFly.appendChild(holder);
 
-    const reveal = to === 1 ? 2000 : 1500;
-    if (to === 1) {
-      holder.classList.add("shaking");
-      [300, 750, 1200].forEach(ms => setTimeout(() => sfx.rattle(), ms));
-      setTimeout(() => { holder.querySelector(".crack")?.classList.add("on"); sfx.pop(); }, 1500);
-    } else {
-      holder.classList.add("glowing");
-      [0, 400, 800, 1100].forEach(ms => setTimeout(() => sfx.sparkle(), ms));
-    }
-    setTimeout(() => {
-      holder.className = "grow-pet born";
-      holder.innerHTML = petHTML(state.species, to);
-      $("showCount").textContent = to === 1 ? `${sp.rare ? "★レア★ " : ""}${sp.name}の あかちゃん！` : sp.name;
-      $("showPraise").textContent = to === 1 ? "うまれた！" : to === 2 ? "おおきく なった！" : "おとなに なった！";
-      showEl.classList.add("rolled");
-      burstAt(showFly, c, 70, 13);
-      if (to === 3) { sfx.fanfare(); fx.rain(c, 120); } else sfx.jingle(to);
-      if (sp.rare) setTimeout(() => fx.firework(innerWidth / 2, innerHeight * 0.3, c), 300);
-    }, reveal);
-    setTimeout(() => closeShow(resolve), reveal + 2300);
-  });
+  if (to === 1) {
+    // たまごが ガタガタ → ひびが入る → パカッ
+    holder.classList.add("shaking");
+    [400, 1000, 1600].forEach(ms => setTimeout(() => sfx.rattle(), ms));
+    setTimeout(() => { holder.querySelector(".crack")?.classList.add("on"); sfx.pop(); }, 2100);
+    await hold(2600, voice.say("あれれ？ たまごが うごいてる"));
+  } else {
+    holder.classList.add("glowing");
+    [0, 500, 1000, 1500].forEach(ms => setTimeout(() => sfx.sparkle(), ms));
+    await hold(2200, voice.say(to === 2 ? "あれ？ ひかってるよ" : "わあ、ぴかぴか ひかってる！"));
+  }
+
+  holder.className = "grow-pet born";
+  holder.innerHTML = petHTML(state.species, to);
+  $("showCount").textContent = to === 1 ? `${sp.rare ? "★" : ""}${sp.name}` : sp.name;
+  $("showPraise").textContent = to === 1 ? "うまれた！" : to === 2 ? "おおきく なった！" : "おとなに なった！";
+  showEl.classList.add("rolled");
+  burstAt(showFly, c, 70, 13);
+  if (to === 3) { sfx.fanfare(); fx.rain(c, 120); } else sfx.jingle(to);
+  if (sp.rare) setTimeout(() => fx.firework(innerWidth / 2, innerHeight * 0.3, c), 300);
+  const line = to === 1 ? `うまれた！ ${sp.rare ? "めずらしい、" : ""}${sp.name}の あかちゃんだよ`
+    : to === 2 ? `${sp.name}が おおきく なったよ` : `${sp.name}が おとなに なったよ！ すごい！`;
+  await hold(3200, voice.say(line));
+  await closeShow();
 }
 
 /* --- 5) ゴール！ --- */
@@ -556,8 +556,9 @@ function goalShow(c) {
     overlay.dataset.theme = c.theme;
     $("ovMedal").textContent = sp.st[2];
     $("ovTitle").textContent = "ゴール！";
-    $("ovText").innerHTML = `${sp.name}が なかまに なったよ！<br>📖 ずかんに とうろく されました<br>ゴール ${state.laps}かいめ 🎉<br><small>つぎの たまごが とどくよ 🥚</small>`;
+    $("ovText").innerHTML = `${sp.name}が なかまに なったよ！<br><small>📖 ずかんに はいったよ ・ ゴール ${state.laps}かいめ</small>`;
     overlay.classList.add("show");
+    voice.say(`ゴール！ ${sp.name}が なかまに なったよ。 ずかんに はいったよ`);
     if (c.extra.type === "steps") walkSteps(c.extra);
     if (c.extra.type === "hop") hopAcross(c.extra);
     fx.rain(c);
@@ -573,6 +574,7 @@ function newEgg() {
   saveState();
   render({ pop: true });
   sfx.arpeggio();
+  voice.say("あたらしい たまごが とどいたよ");
 }
 
 /* 「もどす」は2回タップで実行（子どもの誤タップ対策） */
@@ -582,7 +584,9 @@ $("undoBtn").addEventListener("click", () => {
   if (!undoArmed) {
     undoArmed = true;
     $("undoBtn").classList.add("armed");
-    toast(null, "↩︎ もういちど おすと<br>ひとつ もどります");
+    toast(null, "↩︎ もういちど");
+    voice.stop();
+    voice.say("もういちど おすと、ひとつ もどるよ");
     undoTimer = setTimeout(() => { disarmUndo(); hideToast(); }, 3000);
     return;
   }
@@ -600,6 +604,43 @@ function disarmUndo() {
 }
 
 /* =========================================================
+   こえ（よみあげ）
+   文字がまだ速く読めない子にも わかるように、ブラウザの音声合成（Web Speech API）でしゃべる。
+   say() は「しゃべり終わったら完了する Promise」を返すので、await で「言い終わるまで待つ」が書ける
+   ========================================================= */
+const voice = (() => {
+  const synth = window.speechSynthesis;
+  let jaVoice = null;
+  function pickVoice() {
+    const list = synth ? synth.getVoices().filter(v => (v.lang || "").replace("_", "-").startsWith("ja")) : [];
+    jaVoice = list.find(v => /Kyoko|O-ren|Otoya|Hattori/.test(v.name)) || list[0] || null;
+  }
+  if (synth) { pickVoice(); synth.addEventListener?.("voiceschanged", pickVoice); }
+
+  function say(text) {
+    if (!synth || state.voice === false || !text) return Promise.resolve();
+    return new Promise(resolve => {
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = "ja-JP";
+      if (jaVoice) u.voice = jaVoice;
+      u.rate = 0.95;      // 少しゆっくり
+      u.pitch = 1.25;     // 少し高め（やさしい感じ）
+      let done = false;
+      const finish = () => { if (!done) { done = true; resolve(); } };
+      u.onend = finish;
+      u.onerror = finish;
+      setTimeout(finish, 1200 + text.length * 280);   // 「言い終わった」の合図が来ない端末のための保険
+      synth.speak(u);
+    });
+  }
+  function stop() { try { synth?.cancel(); } catch {} }
+  return { say, stop };
+})();
+/* hold(ms, しゃべりPromise)：「最低 ms 待つ」かつ「声が言い終わるまで待つ」。
+   声が出ない端末でも、速すぎないように最低時間を保証する */
+const hold = (ms, ...promises) => Promise.all([wait(ms), ...promises]);
+
+/* =========================================================
    全画面の演出レイヤー（サイコロ・育つ演出で共用）
    ========================================================= */
 const showEl = $("show");
@@ -615,13 +656,15 @@ function openShow(c, kind, title) {
   void showEl.offsetWidth;           // リフローさせてからクラスを付けると、毎回アニメが最初から再生される
   showEl.classList.add("show");
 }
-function closeShow(resolve) {
-  showEl.classList.add("leaving");
-  setTimeout(() => {
-    showEl.className = "show-layer";
-    showFly.innerHTML = "";
-    resolve();
-  }, 350);
+function closeShow() {
+  return new Promise(resolve => {
+    showEl.classList.add("leaving");
+    setTimeout(() => {
+      showEl.className = "show-layer";
+      showFly.innerHTML = "";
+      resolve();
+    }, 400);
+  });
 }
 function centerOf(el) {
   const r = el.getBoundingClientRect();
@@ -722,6 +765,7 @@ function openMenu() {
   menuOv.dataset.theme = SONG[state.lastSong].theme;
   $("menuText").innerHTML = `いま：${state.pos}マスめ ／ ゴール ${state.laps}かい<br>
     <small>${CARDS.map(c => `${c.icon}${state.totals[c.id] || 0}`).join("　")}<br>（ずかんは消えません）</small>`;
+  $("voiceBtn").textContent = state.voice === false ? "🔇 こえ：オフ（おすと オン）" : "🔊 こえ：オン（おすと オフ）";
   menuOv.classList.add("show");
 }
 
@@ -733,6 +777,11 @@ menuOv.addEventListener("click", e => {
   if (act === "all") { state.pos = 0; state.moves = []; state.totals = {}; state.laps = 0; state.species = rollSpecies(state.species); }
   if (act === "restart" || act === "all") { saveState(); render({ pop: true }); }
   if (act === "finale") { openStage(); runFinale(); }
+  if (act === "voice") {
+    state.voice = state.voice === false;    // オフ → オン、オン → オフ
+    saveState();
+    voice.say("こえを だすよ");
+  }
 });
 
 /* iOSで :active（押し込みの見た目）を効かせるおまじない */
