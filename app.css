@@ -712,3 +712,207 @@ h1.holding { transform: scale(.88); transition: transform 1.9s linear; }
 /* おめでとう／おとなメニュー */
 .overlay[data-theme="forest"] .panel { background: linear-gradient(170deg, #fff3e0, #fff); border: 4px solid #ffb36b; color: #8a4b1e; }
 .overlay[data-theme="dusk"] .panel { background: linear-gradient(170deg, #f6efff, #fff); border: 4px solid #ffa86b; color: #6a4c93; }
+
+/* =========================================================
+   すごろく版の部品
+   テーマごとの色は CSS変数（--sq: マスの色 / --sqb: マスのふち / --ink: 文字 / --soft: うすい背景）で切り替える
+   ========================================================= */
+.night  { --sq: #3a2382; --sqb: rgba(255,210,63,.55); --ink: #fff;    --soft: rgba(255,210,63,.12); }
+.pink   { --sq: #fff5f9; --sqb: #f9a3c3; --ink: #c2456f; --soft: #fff0f6; }
+.garden { --sq: #fff7f5; --sqb: #ffb3a7; --ink: #3f8f4f; --soft: #f2fbea; }
+.meadow { --sq: #f3faff; --sqb: #a9d6f5; --ink: #3a6f99; --soft: #eef8ff; }
+.forest { --sq: #fff8ee; --sqb: #f3c98b; --ink: #8a4b1e; --soft: #fff3e0; }
+.dusk   { --sq: #fff6f0; --sqb: #ffc0a0; --ink: #6a4c93; --soft: #f6efff; }
+
+.card { padding: 16px 14px 12px; }
+.zukan-btn {
+  position: absolute; top: 10px; right: 10px; z-index: 2;
+  width: 44px; height: 44px; border: 0; border-radius: 50%; font-size: 22px;
+  background: var(--soft); box-shadow: 0 3px 0 var(--sqb);
+}
+.zukan-btn:active { transform: translateY(3px); box-shadow: none; }
+.medals { font-size: 13px; }
+
+/* --- ペットの様子 --- */
+.pet-panel {
+  display: flex; align-items: center; gap: 12px; margin: 8px 2px 10px;
+  padding: 8px 12px; border-radius: 18px; background: var(--soft); color: var(--ink);
+}
+.pet-big { width: 62px; height: 62px; flex: none; display: grid; place-items: center; font-size: 46px; }
+.pet-info { flex: 1; min-width: 0; }
+.pet-name { font-size: 16px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pet-hint { font-size: 12px; font-weight: 800; opacity: .8; margin-top: 2px; }
+.gbar { position: relative; height: 10px; margin: 8px 10px 6px 0; border-radius: 99px; background: rgba(0,0,0,.08); }
+.gbar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 99px; background: linear-gradient(90deg, var(--ring), var(--accent)); transition: width .4s; }
+.gbar b { position: absolute; top: 50%; transform: translate(-50%, -50%); font-size: 14px; line-height: 1; }
+
+.pet { position: relative; display: inline-grid; place-items: center; line-height: 1; }
+.pet .egg { width: .9em; height: auto; display: block; }
+.pet.st1 { font-size: .8em; }
+.pet.st2 { font-size: .95em; }
+.pet.st3 { font-size: 1.1em; }
+.pet .crown { position: absolute; top: -.42em; left: 50%; transform: translateX(-50%) rotate(-8deg); font-size: .45em; font-style: normal; }
+.pet.wobble { animation: eggWobble 1.6s ease-in-out infinite; transform-origin: 50% 90%; }
+@keyframes eggWobble { 0%,70%,100% { transform: rotate(0); } 76% { transform: rotate(-10deg); } 82% { transform: rotate(10deg); } 88% { transform: rotate(-6deg); } 94% { transform: rotate(4deg); } }
+.egg .crack { opacity: 0; transition: opacity .2s; }
+.egg .crack.on { opacity: 1; }
+
+/* --- すごろく盤 --- */
+.board {
+  position: relative; width: min(100%, 44vh); aspect-ratio: 1; margin: 0 auto;
+  display: grid; grid-template: repeat(4, 1fr) / repeat(4, 1fr); gap: 6px;
+}
+.board .path { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; overflow: visible; }
+.board .path polyline { fill: none; stroke: var(--sqb); stroke-width: 10; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 2 18; vector-effect: non-scaling-stroke; }
+.sq {
+  position: relative; z-index: 1; border-radius: 16px; display: grid; place-items: center;
+  background: var(--sq); border: 3px solid var(--sqb); color: var(--accent);
+  font-weight: 800; font-size: 15px; transition: background .3s, transform .3s;
+}
+.sq span { opacity: .7; }
+.sq.star span, .sq.warp span, .sq.treat span, .sq.goal span { font-size: 24px; opacity: 1; }
+.sq.start span { position: absolute; top: 4px; font-size: 10px; opacity: 1; }
+.sq.star  { background: #fff6cc; border-color: #ffd23f; }
+.sq.treat { background: #ffe8f1; border-color: #ff9ecb; }
+.sq.warp  { background: #e3f3ff; border-color: #7cc4f5; }
+.sq.goal  { background: linear-gradient(160deg, #fff1a8, #ffcc33); border-color: #e0a800; }
+.sq.goal span { animation: bounce 1.3s ease-in-out infinite; }
+.sq.visited:not(.goal) { filter: saturate(.55) brightness(.97); }
+.sq.visited::after {
+  content: ""; position: absolute; right: 4px; bottom: 4px; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--accent); opacity: .55;
+}
+.sq.start::after, .sq.goal::after { display: none; }
+.sq.pop { animation: popIn .45s cubic-bezier(.3,1.7,.5,1) both; animation-delay: calc(var(--i) * 35ms); }
+
+.token {
+  position: absolute; z-index: 3; width: 25%; height: 25%; display: grid; place-items: center;
+  font-size: clamp(30px, 10vw, 44px); pointer-events: none;
+  transition: left .3s cubic-bezier(.4,0,.2,1), top .3s cubic-bezier(.4,0,.2,1);
+  filter: drop-shadow(0 4px 3px rgba(0,0,0,.25));
+}
+.token.hop > .pet { animation: tokenHop .33s ease-out; }
+@keyframes tokenHop { 0% { transform: translateY(0) scale(1); } 45% { transform: translateY(-26px) scale(1.1); } 80% { transform: translateY(2px) scale(1.12, .88); } 100% { transform: none; } }
+.token.munch > .pet { animation: munch .25s ease-in-out 6; }
+@keyframes munch { 50% { transform: scale(1.15, .9); } }
+
+.toast {
+  position: absolute; left: 50%; top: 50%; z-index: 5; min-width: 70%; padding: 12px 16px;
+  border-radius: 18px; text-align: center; font-weight: 800; font-size: 18px; line-height: 1.4;
+  background: #fff; color: #5a3a1a; border: 3px solid var(--accent); box-shadow: 0 10px 24px rgba(0,0,0,.25);
+  transform: translate(-50%, -50%) scale(0); opacity: 0; pointer-events: none;
+}
+.toast small { font-size: 14px; }
+.toast.show { animation: toastIn .45s cubic-bezier(.3,1.7,.5,1) forwards; }
+@keyframes toastIn { to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
+
+.msg { margin-top: 8px; font-size: 15px; }
+
+/* --- サイコロ・育つ演出（全画面） --- */
+.show-layer.show.v-dice .show-praise, .show-layer.show.v-grow .show-praise { opacity: 0; animation: none; }
+.show-layer.show.v-dice.rolled .show-praise, .show-layer.show.v-grow.rolled .show-praise {
+  opacity: 1; animation: dropIn .5s cubic-bezier(.3,1.6,.5,1) both, wobble 1.2s .6s ease-in-out infinite;
+}
+.show-layer.leaving .show-fly { opacity: 0; transition: opacity .3s; }
+
+.die {
+  position: absolute; inset: 0; margin: auto; width: 74%; height: 74%; padding: 13%;
+  display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+  border-radius: 24%; background: linear-gradient(145deg, #fff, #efeaff);
+  box-shadow: inset -7px -9px 0 rgba(0,0,0,.08), 0 16px 34px rgba(0,0,0,.35);
+}
+.pip { width: 72%; height: 72%; margin: auto; border-radius: 50%; background: #3a2a5a; visibility: hidden; }
+.die[data-f="1"] .p5,
+.die[data-f="2"] .p1, .die[data-f="2"] .p9,
+.die[data-f="3"] .p1, .die[data-f="3"] .p5, .die[data-f="3"] .p9 { visibility: visible; }
+.die[data-f="1"] .p5 { width: 92%; height: 92%; background: #ff3d6e; }
+.die.rolling { animation: tumble .36s linear infinite; }
+@keyframes tumble {
+  0% { transform: translateY(0) rotate(0); } 25% { transform: translateY(-34px) rotate(90deg); }
+  50% { transform: translateY(0) rotate(180deg) scale(.92, 1.05); } 75% { transform: translateY(-22px) rotate(270deg); }
+  100% { transform: translateY(0) rotate(360deg); }
+}
+.die.landed { animation: dieLand .55s cubic-bezier(.3,1.7,.5,1); }
+@keyframes dieLand { 0% { transform: scale(1.45) rotate(-18deg); } 100% { transform: none; } }
+
+.grow-pet { position: absolute; inset: 0; display: grid; place-items: center; font-size: min(40vw, 160px); }
+.grow-pet .egg { width: .8em; }
+.grow-pet.shaking > .pet { animation: hatchShake 1.5s ease-in both; transform-origin: 50% 90%; }
+@keyframes hatchShake {
+  0%,100% { transform: rotate(0); } 10% { transform: rotate(-8deg); } 20% { transform: rotate(8deg); }
+  35% { transform: rotate(-12deg) scale(1.03); } 45% { transform: rotate(12deg) scale(1.03); }
+  60% { transform: rotate(-16deg) scale(1.07); } 70% { transform: rotate(16deg) scale(1.07); }
+  85% { transform: rotate(-6deg) scale(1.12); } 92% { transform: rotate(6deg) scale(1.15); }
+}
+.grow-pet.glowing > .pet { animation: evolve 1.5s ease-in both; }
+@keyframes evolve {
+  0% { filter: none; transform: scale(1); }
+  30% { filter: brightness(2.2); transform: scale(1.1); } 40% { filter: none; transform: scale(.95); }
+  60% { filter: brightness(2.6); transform: scale(1.15); } 70% { filter: none; transform: scale(.95); }
+  90% { filter: brightness(4) drop-shadow(0 0 30px #fff); transform: scale(1.25); } 100% { filter: brightness(6); transform: scale(1.3); }
+}
+.grow-pet.born > .pet { animation: popOut2 .8s cubic-bezier(.3,1.7,.5,1) both, breathe2 1.4s .8s ease-in-out infinite; }
+@keyframes popOut2 { from { transform: scale(.1) rotate(-30deg); } to { transform: none; } }
+@keyframes breathe2 { 0%,100% { transform: scale(1); } 50% { transform: scale(1.07) rotate(3deg); } }
+
+/* --- ずかん --- */
+.zukan-panel { max-height: 86vh; overflow-y: auto; }
+.zukan-count { font-size: 14px !important; margin-bottom: 8px; }
+.zukan-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.zukan-grid .zukan-count { grid-column: 1 / -1; }
+.zk {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 10px 4px 8px; border-radius: 16px; background: #faf6ff; border: 2px solid #eadcff;
+}
+.zk-pet { font-size: 40px; line-height: 1.1; }
+.zk.none .zk-pet { filter: brightness(0); opacity: .18; }   /* まだ会っていない子はシルエット */
+.zk-name { font-size: 12px; font-weight: 800; }
+.zk-n { font-size: 12px; font-weight: 800; color: #d9480f; }
+.zk-rare { position: absolute; top: -8px; right: -4px; font-size: 10px; font-weight: 800; color: #7a3d00; background: linear-gradient(180deg, #fff1a8, #ffcc33); padding: 2px 6px; border-radius: 99px; }
+.zk.rare.got { background: linear-gradient(160deg, #fff8d6, #fff); border-color: #ffd23f; }
+.overlay#zukanOv .panel { color: #4a2196; }
+
+/* =========================================================
+   テーマ：playroom（ひげじいさん）／ starry（きらきらぼし）
+   ========================================================= */
+.playroom { --accent: #2bb3a3; --glow: rgba(43,179,163,.45); --edge: #1d8a7d; --ring: #7fe0d4;
+            --sq: #f5fffd; --sqb: #9fe3da; --ink: #1d6f66; --soft: #e8faf7; }
+.starry   { --accent: #ffcf33; --glow: rgba(255,207,51,.5); --edge: #c99a00; --ring: #ffe680;
+            --sq: #1d356f; --sqb: rgba(255,230,120,.55); --ink: #fff; --soft: rgba(255,230,120,.12); }
+
+.bg-playroom {
+  background-color: #fff8d6;
+  background-image:
+    radial-gradient(circle, rgba(255,143,171,.35) 0 9px, transparent 10px),
+    radial-gradient(circle, rgba(43,179,163,.3) 0 7px, transparent 8px);
+  background-size: 64px 64px, 64px 64px;
+  background-position: 0 0, 32px 32px;
+}
+.bg-starry { background: radial-gradient(ellipse 120% 70% at 50% 0%, #2f56b0 0%, #16306e 45%, #0a1636 100%); }
+
+.playroom .card { background: #fff; border: 3px solid #9fe3da; box-shadow: 0 14px 30px rgba(43,179,163,.22); }
+.starry .card {
+  background: linear-gradient(160deg, rgba(80,120,220,.35), rgba(15,30,80,.65));
+  border: 2px solid rgba(255,230,120,.55); box-shadow: 0 0 34px rgba(255,230,120,.2);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+}
+.playroom .sub { color: #3ab0a2; }
+.starry .sub { color: #cfe0ff; }
+.playroom h1 { color: #2bb3a3; }
+.starry h1 { color: #ffe680; text-shadow: 0 0 14px rgba(255,220,90,.6); }
+.playroom .head-icon { animation: wiggle 1.8s ease-in-out infinite; }
+.starry .head-icon { animation: floaty 2.6s ease-in-out infinite; }
+.playroom .medals, .playroom .msg, .playroom .undo { color: #1d6f66; }
+.starry .medals { color: #ffe9a8; }
+.starry .msg, .starry .undo { color: #fff; }
+.playroom .play { background: linear-gradient(180deg, #7fe0d4, #2bb3a3); color: #fff; text-shadow: 0 2px 0 rgba(0,0,0,.12); }
+.starry .play { background: linear-gradient(180deg, #ffe680, #ffc21f); color: #1b2f66; }
+
+.show-layer.playroom { --ray: rgba(255,255,255,.6); --txt: #1d8a7d; --txt2: #1d6f66; }
+.show-layer.starry   { --ray: rgba(255,230,120,.2); --txt: #ffe680; --txt2: #fff; }
+.show-layer.playroom .show-bg { background: radial-gradient(circle at 50% 45%, rgba(255,250,225,.96), rgba(160,230,220,.97) 75%); }
+.show-layer.starry   .show-bg { background: radial-gradient(circle at 50% 45%, rgba(60,100,200,.94), rgba(8,18,50,.97) 70%); }
+.show-layer.starry .show-praise { text-shadow: 0 0 18px rgba(255,220,90,.8); }
+
+.overlay[data-theme="playroom"] .panel { background: linear-gradient(170deg, #e8faf7, #fff); border: 4px solid #7fe0d4; color: #1d6f66; }
+.overlay[data-theme="starry"]   .panel { background: linear-gradient(170deg, #fff8dc, #fff); border: 4px solid #ffcf33; color: #1b2f66; }
