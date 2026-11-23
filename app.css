@@ -1005,3 +1005,20 @@ h1.holding { transform: scale(.88); transition: transform 1.9s linear; }
 
 /* 1画面版では カードが横いっぱいなので、月はカードの裏に隠れて見えにくい → 出さない */
 .bg-night .moon { display: none; }
+
+/* =========================================================
+   こうたい（名前タップで ひより ⇄ みやび）
+   ========================================================= */
+#childTitle { cursor: pointer; }
+#childTitle .swap {
+  display: inline-grid; place-items: center; margin-left: 8px;
+  width: 1.3em; height: 1.3em; border-radius: 50%; font-size: .7em;
+  background: var(--soft); color: var(--accent); box-shadow: 0 2px 0 var(--sqb);
+  animation: swapHint 2.4s ease-in-out infinite;
+}
+@keyframes swapHint { 0%,80%,100% { transform: rotate(0); } 88% { transform: rotate(180deg); } }
+/* カードと曲ボタンが くるっと回って 入れ替わる */
+.app.flip-out .card, .app.flip-out .songs { animation: flipOut .35s ease-in forwards; }
+.app.flip-in  .card, .app.flip-in  .songs { animation: flipIn .45s cubic-bezier(.3,1.4,.5,1) both; }
+@keyframes flipOut { to { transform: perspective(900px) rotateY(90deg) scale(.95); opacity: .3; } }
+@keyframes flipIn { from { transform: perspective(900px) rotateY(-90deg) scale(.95); opacity: .3; } to { transform: none; opacity: 1; } }

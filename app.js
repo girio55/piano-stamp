@@ -7,11 +7,16 @@
    練習回数は「曲ごと」に数え、盤面とたまごは「子どもごと」に1つ。
    ========================================================= */
 (() => {
-const CONFIG = Object.assign(
-  { storageKey: "piano-sugoroku-v3", childName: "", songs: ["aladdin", "neko"], legacyKeys: [], recitalDate: "" },
-  window.APP_CONFIG || {}
-);
-const STORAGE_KEY = CONFIG.storageKey;
+const CONFIG = Object.assign({ children: [], startChild: "", recitalDate: "" }, window.APP_CONFIG || {});
+// 古い書き方（1人分の設定）でも動くようにする
+if (!CONFIG.children.length) {
+  CONFIG.children = [{ id: "main", name: CONFIG.childName || "", songs: CONFIG.songs || ["aladdin", "neko"],
+    storageKey: CONFIG.storageKey || "piano-sugoroku-v3", legacyKeys: CONFIG.legacyKeys || [] }];
+}
+const CURRENT_KEY = "piano-sugoroku-current";   // いま だれの番か（この端末で最後に選んだ子）
+
+/* いまの子ども と その子の曲。子どもを切り替えると、ここが入れ替わる */
+let CHILD, STORAGE_KEY, CARDS, SONG, state;
 
 /* ---------- すごろくのルール ---------- */
 const GOAL = 15;                        // マスは 0（スタート）〜 15（ゴール）の16マス
@@ -55,8 +60,7 @@ const CARD_LIB = {
   kirakira: { title: "きらきらぼし", icon: "⭐", theme: "starry",
     emojis: ["⭐", "🌟", "✨", "💫"], colors: ["#ffcf33", "#ffe680", "#9ec5ff", "#ffffff", "#c9a7ff"], extra: { type: "rain" } },
 };
-const CARDS = CONFIG.songs.map(id => ({ id, ...CARD_LIB[id] }));
-const SONG = Object.fromEntries(CARDS.map(c => [c.id, c]));
+
 
 /* ---------- 小さな道具 ---------- */
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -98,7 +102,7 @@ function freshState() {
 function migrateFromLegacy() {
   const s = freshState();
   let best = null;
-  for (const key of CONFIG.legacyKeys) {
+  for (const key of CHILD.legacyKeys || []) {
     const old = loadJSON(key);
     if (!old) continue;
     let mine = false;
@@ -121,11 +125,20 @@ function migrateFromLegacy() {
   return s;
 }
 
-let state = loadJSON(STORAGE_KEY);
-if (!state || state.v !== 3) state = migrateFromLegacy();
-if (state.pos >= GOAL) { state.pos = 0; state.moves = []; state.species = rollSpecies(state.species); }
-if (!SONG[state.lastSong]) state.lastSong = CARDS[0].id;
-saveState();
+/* 子どものデータを読み込む（なければ古いデータから引っ越し） */
+function selectChild(id) {
+  CHILD = CONFIG.children.find(ch => ch.id === id) || CONFIG.children[0];
+  STORAGE_KEY = CHILD.storageKey;
+  CARDS = CHILD.songs.map(sid => ({ id: sid, ...CARD_LIB[sid] }));
+  SONG = Object.fromEntries(CARDS.map(c => [c.id, c]));
+  state = loadJSON(STORAGE_KEY);
+  if (!state || state.v !== 3) state = migrateFromLegacy();
+  if (state.pos >= GOAL) { state.pos = 0; state.moves = []; state.species = rollSpecies(state.species); }
+  if (!SONG[state.lastSong]) state.lastSong = CARDS[0].id;
+  saveState();
+  try { localStorage.setItem(CURRENT_KEY, JSON.stringify(CHILD.id)); } catch {}
+}
+selectChild(loadJSON(CURRENT_KEY) ?? CONFIG.startChild);
 navigator.storage?.persist?.();
 
 const totalAll = () => Object.values(state.totals).reduce((a, b) => a + b, 0);
@@ -141,13 +154,13 @@ function cellXY(i) {
    上：名前・たまご・盤面（盤面は残りの高さに合わせて縮む） 下：曲ボタン
    ========================================================= */
 document.body.insertAdjacentHTML("afterbegin", `
-  ${CARDS.map(c => `<div class="bg bg-${c.theme}" data-id="${c.id}"></div>`).join("")}
+  <div id="bgs"></div>
   <main class="app" id="app">
     <div class="card">
       <div class="top">
         <div class="titles">
           <div class="sub">ピアノ すごろく</div>
-          <h1 id="childTitle">🎹 ${CONFIG.childName || "ピアノ すごろく"}</h1>
+          <h1 id="childTitle"></h1>
           <div class="medals" id="stats"></div>
         </div>
         <button class="round-btn" id="undoBtn" aria-label="ひとつ もどす">↩︎</button>
@@ -157,9 +170,7 @@ document.body.insertAdjacentHTML("afterbegin", `
       <div class="board-wrap"><div class="board" id="board"></div></div>
     </div>
     <div class="songs-label">🎹 ひいた きょくを おしてね</div>
-    <div class="songs" id="songs">
-      ${CARDS.map(c => `<button class="song ${c.theme}" data-id="${c.id}"><span class="ic">${c.icon}</span><span class="t">${c.title}</span></button>`).join("")}
-    </div>
+    <div class="songs" id="songs"></div>
   </main>
 
   <div class="overlay" id="overlay">
@@ -223,8 +234,19 @@ document.body.insertAdjacentHTML("afterbegin", `
 
 const appEl = $("app");
 const boardEl = $("board");
-const bgEls = [...document.querySelectorAll(".bg")];
-bgEls.forEach(bg => decorate(bg, SONG[bg.dataset.id].theme));
+let bgEls = [];
+
+/* いまの子ども用に、名前・背景・曲ボタンを作り直す */
+function buildChild() {
+  const multi = CONFIG.children.length > 1;
+  $("childTitle").innerHTML = `🎹 ${CHILD.name || "ピアノ すごろく"}${multi ? `<span class="swap">⇄</span>` : ""}`;
+  $("bgs").innerHTML = CARDS.map(c => `<div class="bg bg-${c.theme}" data-id="${c.id}"></div>`).join("");
+  bgEls = [...document.querySelectorAll(".bg")];
+  bgEls.forEach(bg => decorate(bg, SONG[bg.dataset.id].theme));
+  $("songs").innerHTML = CARDS.map(c =>
+    `<button class="song ${c.theme}" data-id="${c.id}"><span class="ic">${c.icon}</span><span class="t">${c.title}</span></button>`).join("");
+  document.querySelectorAll(".song").forEach(b => b.addEventListener("click", () => onPlay(SONG[b.dataset.id])));
+}
 
 /* 背景の飾り（テーマごと） */
 
@@ -400,7 +422,6 @@ function placeToken(pos, jump) {
    ========================================================= */
 let busy = false;   // 演出中の連打を防ぐ
 
-document.querySelectorAll(".song").forEach(b => b.addEventListener("click", () => onPlay(SONG[b.dataset.id])));
 
 async function onPlay(c) {
   if (busy) return;
@@ -746,19 +767,54 @@ $("ovBtn").addEventListener("click", () => {
 });
 
 /* =========================================================
-   おとなメニュー：名前を2秒長押しで開く（子どもが偶然開かないように）
+   名前のところ
+   ・ちょんとタップ（0.5秒未満）……… つぎの子に こうたい
+   ・2秒 長押し ……………………………… おとなメニュー（子どもが偶然開かないように）
+   押していた時間で「タップ」と「長押し」を見分けている
    ========================================================= */
 const menuOv = $("menuOv");
 (() => {
   const h1 = $("childTitle");
-  let timer = null;
+  let timer = null, downAt = 0, pressing = false;
   h1.addEventListener("pointerdown", () => {
+    pressing = true;
+    downAt = performance.now();
     h1.classList.add("holding");
-    timer = setTimeout(() => { h1.classList.remove("holding"); openMenu(); }, 2000);
+    timer = setTimeout(() => { pressing = false; h1.classList.remove("holding"); openMenu(); }, 2000);
   });
-  const stop = () => { clearTimeout(timer); h1.classList.remove("holding"); };
-  ["pointerup", "pointerleave", "pointercancel"].forEach(ev => h1.addEventListener(ev, stop));
+  h1.addEventListener("pointerup", () => {
+    clearTimeout(timer);
+    h1.classList.remove("holding");
+    if (pressing && performance.now() - downAt < 500) switchChild();
+    pressing = false;
+  });
+  const cancel = () => { pressing = false; clearTimeout(timer); h1.classList.remove("holding"); };
+  ["pointerleave", "pointercancel"].forEach(ev => h1.addEventListener(ev, cancel));
 })();
+
+/* つぎの子に こうたい。カードが くるっと回るあいだに 中身を入れ替える */
+async function switchChild() {
+  if (busy || CONFIG.children.length < 2) return;
+  busy = true;
+  disarmUndo();
+  voice.stop();
+  const list = CONFIG.children;
+  const next = list[(list.indexOf(CHILD) + 1) % list.length];
+  voice.say(`${next.name || "つぎのこ"}の ばんだよ`);   // タップの処理の中なので iOS でも声が出る
+  sfx.whoosh();
+  appEl.classList.add("flip-out");
+  await wait(350);
+  selectChild(next.id);
+  buildChild();
+  appEl.classList.remove("flip-out");
+  setTheme(SONG[state.lastSong]);
+  render({ pop: true });
+  appEl.classList.add("flip-in");
+  sfx.arpeggio();
+  await wait(450);
+  appEl.classList.remove("flip-in");
+  busy = false;
+}
 
 function openMenu() {
   if (busy) return;
@@ -788,6 +844,7 @@ menuOv.addEventListener("click", e => {
 document.addEventListener("touchstart", () => {}, { passive: true });
 
 /* 最初の表示 */
+buildChild();
 setTheme(SONG[state.lastSong]);
 render();
 
@@ -808,7 +865,7 @@ const FINALE_FX = { emojis: ["🎉", "⭐", "🎵", "💖", "🌟", "🎶"],
 
 function openStage() {
   stageTimers.forEach(clearTimeout); stageTimers = [];
-  const name = CONFIG.childName ? `${CONFIG.childName} ちゃん` : "がんばりやさん";
+  const name = CHILD.name || "がんばりやさん";
   const d = new Date();
   let total = 0;
   const rows = CARDS.map(c => {

@@ -15,19 +15,27 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;800&display=swap" rel="stylesheet">
 <!-- ?v=… を変えると、iPhoneが古いキャッシュではなく新しいファイルを読みに行く -->
-<link rel="stylesheet" href="../app.css?v=10">
+<link rel="stylesheet" href="../app.css?v=11">
 </head>
 <body>
 <script>
   // このページの設定。仕組みは app.js にまとめてある
   window.APP_CONFIG = {
-    storageKey: "piano-sugoroku-miyabi-v3",
-    childName: "みやびくん",
-    songs: ["tulip", "sheep", "hige", "kirakira"],
-    legacyKeys: ["piano-stamp-card-tulip-v1", "piano-stamp-card-hoshi-v1"],
+    // 名前をタップすると、この順番で こうたい する
+    children: [
+      { id: "hiyori", name: "ひよりちゃん",
+        songs: ["aladdin", "neko", "risu", "kitsune"],          // 担当の曲（app.js の CARD_LIB から選ぶ）
+        storageKey: "piano-sugoroku-hiyori-v3",                 // この子のデータの保存場所
+        legacyKeys: ["piano-stamp-card-v1", "piano-stamp-card-yama-v1"] },   // 以前の保存場所（引き継ぎ用）
+      { id: "miyabi", name: "みやびくん",
+        songs: ["tulip", "sheep", "hige", "kirakira"],
+        storageKey: "piano-sugoroku-miyabi-v3",
+        legacyKeys: ["piano-stamp-card-tulip-v1", "piano-stamp-card-hoshi-v1"] },
+    ],
+    startChild: "miyabi",   // はじめて開いたときの子（あとは最後に選んだ子を覚えている）
     recitalDate: "2026-11-08",
   };
 </script>
-<script src="../app.js?v=10"></script>
+<script src="../app.js?v=11"></script>
 </body>
 </html>
