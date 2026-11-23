@@ -916,3 +916,92 @@ h1.holding { transform: scale(.88); transition: transform 1.9s linear; }
 
 .overlay[data-theme="playroom"] .panel { background: linear-gradient(170deg, #e8faf7, #fff); border: 4px solid #7fe0d4; color: #1d6f66; }
 .overlay[data-theme="starry"]   .panel { background: linear-gradient(170deg, #fff8dc, #fff); border: 4px solid #ffcf33; color: #1b2f66; }
+
+/* =========================================================
+   1画面レイアウト（子どもごとに 盤面1つ ＋ 曲ボタン）
+   縦の高さを flex で配分する：
+     カード（名前・たまご・盤面）… 残りぜんぶ（flex: 1）
+     曲ボタン …………………………… 中身の高さだけ
+   盤面は「カードの中で余った高さ」と「横幅」の小さい方に合わせた正方形にする
+   ========================================================= */
+.bg { opacity: 0; transition: opacity .8s; }
+.bg.on { opacity: 1; }
+
+.app {
+  position: fixed; inset: 0; z-index: 1;
+  display: flex; flex-direction: column; gap: 8px;
+  width: 100%; max-width: 520px; margin: 0 auto;
+  padding: calc(env(safe-area-inset-top) + 8px) 12px calc(env(safe-area-inset-bottom) + 10px);
+}
+.app .card {
+  flex: 1 1 auto; min-height: 0; width: 100%; max-width: none; margin: 0;
+  display: flex; flex-direction: column; gap: 8px; padding: 10px 10px 10px;
+}
+.app.pink .card { margin-top: 26px; }          /* ねこの耳の分だけ下げる */
+
+.top { display: flex; align-items: center; gap: 8px; }
+.top .titles { flex: 1; min-width: 0; }
+.top .sub { font-size: 11px; text-align: left; }
+.top h1 { justify-content: flex-start; font-size: clamp(20px, 6vw, 26px); line-height: 1.2; white-space: nowrap; }
+.top .medals { min-height: 0; margin-top: 2px; font-size: 12px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.round-btn {
+  flex: none; width: 42px; height: 42px; border: 0; border-radius: 50%; font-size: 20px; font-weight: 800;
+  background: var(--soft); color: var(--accent); box-shadow: 0 3px 0 var(--sqb);
+}
+.round-btn:active { transform: translateY(3px); box-shadow: none; }
+.round-btn.hidden { visibility: hidden; }
+.round-btn.armed { background: #ffe3ea; color: #d93d75; box-shadow: 0 0 0 3px #ff8fab; }
+
+.app .pet-panel { margin: 0; padding: 6px 10px; }
+.app .pet-big { width: 54px; height: 54px; font-size: 40px; }
+.app .pet-hint { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* 盤面：コンテナクエリ単位（cqw/cqh）で「置き場所」の縦横の小さい方に合わせる */
+.board-wrap { flex: 1 1 auto; min-height: 120px; display: grid; place-items: center; container-type: size; }
+.app .board { width: min(100cqw, 100cqh); height: min(100cqw, 100cqh); aspect-ratio: auto; margin: 0; gap: 5px; }
+@supports not (width: 1cqw) {                  /* 古いiOS（15以前）向けの保険 */
+  .app .board { width: min(100%, 38vh); height: auto; aspect-ratio: 1; }
+}
+.app .sq { border-radius: 14px; border-width: 2.5px; font-size: clamp(11px, 3.4vw, 15px); }
+.app .sq.star span, .app .sq.warp span, .app .sq.treat span, .app .sq.goal span { font-size: clamp(16px, 5.5vw, 24px); }
+.app .token { font-size: clamp(24px, 8.5vw, 42px); }
+.app .toast { font-size: clamp(14px, 4.2vw, 18px); }
+
+/* 曲ボタン */
+.songs-label {
+  flex: none; align-self: center; padding: 3px 14px; border-radius: 99px;
+  background: rgba(255,255,255,.88); color: #5a3a7a; font-size: 13px; font-weight: 800;
+}
+.songs { flex: none; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.song {
+  position: relative; min-width: 0; height: clamp(46px, 7.2vh, 60px); border: 0; border-radius: 18px;
+  display: flex; align-items: center; justify-content: center; gap: 4px; padding: 0 8px;
+  font-size: clamp(13px, 3.7vw, 17px); font-weight: 800; color: #fff; text-shadow: 0 2px 0 rgba(0,0,0,.22);
+  background: linear-gradient(180deg, var(--ring), var(--accent));
+  box-shadow: 0 5px 0 var(--edge), 0 8px 16px var(--glow);
+  transition: transform .08s, box-shadow .08s;
+}
+.song .ic { flex: none; font-size: 1.35em; text-shadow: none; }
+.song .t { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.song.night, .song.starry { color: #2a1a5e; text-shadow: 0 1px 0 rgba(255,255,255,.5); }
+.song:active { transform: translateY(5px); box-shadow: 0 0 0 var(--edge), 0 3px 6px var(--glow); }
+.song.last::after {                 /* さいごに ひいた曲に しるし */
+  content: ""; position: absolute; inset: -4px; border-radius: 21px; border: 3px solid #fff;
+  box-shadow: 0 0 10px rgba(255,255,255,.7); pointer-events: none;
+}
+
+/* 背の低い画面（iPhone SE など）では、少しずつ詰める */
+@media (max-height: 720px) {
+  .app { gap: 6px; }
+  .top .sub { display: none; }
+  .app .pet-big { width: 44px; height: 44px; font-size: 32px; }
+  .app .pet-panel { padding: 4px 10px; }
+  .app .gbar { margin: 4px 10px 3px 0; }
+  .songs-label { display: none; }
+  .to-goal { display: none; }
+  .app.pink .card { margin-top: 24px; }
+  .app.pink .card::before, .app.pink .card::after { top: -24px; border-bottom-width: 28px; border-left-width: 21px; border-right-width: 21px; }
+}
+
+/* 1画面版では カードが横いっぱいなので、月はカードの裏に隠れて見えにくい → 出さない */
+.bg-night .moon { display: none; }

@@ -1,15 +1,14 @@
 /* =========================================================
-   ピアノ すごろく 共通エンジン
+   ピアノ すごろく 共通エンジン（子どもごとに 1つの盤面・1つのたまご）
    各ページの index.html で window.APP_CONFIG を決めてから、このファイルを読み込む。
-   「設定（どの曲・どこに保存）」と「仕組み（動き・保存処理）」を分けておくと、
-   ページを増やしても直すのは1か所で済む。
 
-   遊び方：1回ひくごとにサイコロ（1〜3）をふって、たまごをのせたコマが進む。
+   遊び方：ひいた曲のボタンを押す → その曲の演出でサイコロ（1〜3）→ たまごをのせたコマが進む。
    進むと たまご → あかちゃん → こども → ゴールで おとな に育ち、ずかんに登録される。
+   練習回数は「曲ごと」に数え、盤面とたまごは「子どもごと」に1つ。
    ========================================================= */
 (() => {
 const CONFIG = Object.assign(
-  { storageKey: "piano-stamp-card-v1", childName: "", cards: ["aladdin", "neko"], recitalDate: "" },
+  { storageKey: "piano-sugoroku-v3", childName: "", songs: ["aladdin", "neko"], legacyKeys: [], recitalDate: "" },
   window.APP_CONFIG || {}
 );
 const STORAGE_KEY = CONFIG.storageKey;
@@ -56,7 +55,8 @@ const CARD_LIB = {
   kirakira: { title: "きらきらぼし", icon: "⭐", theme: "starry",
     emojis: ["⭐", "🌟", "✨", "💫"], colors: ["#ffcf33", "#ffe680", "#9ec5ff", "#ffffff", "#c9a7ff"], extra: { type: "rain" } },
 };
-const CARDS = CONFIG.cards.map(id => ({ id, ...CARD_LIB[id] }));
+const CARDS = CONFIG.songs.map(id => ({ id, ...CARD_LIB[id] }));
+const SONG = Object.fromEntries(CARDS.map(c => [c.id, c]));
 
 /* ---------- 小さな道具 ---------- */
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -66,12 +66,9 @@ const wait = ms => new Promise(r => setTimeout(r, ms));   // await wait(500) で
 
 /* =========================================================
    データの保存（localStorage）
-   localStorage は「ドメインごと」に1つ。同じ girio55.github.io の
-   別ページと混ざらないよう、ページごとに別のキーを使う
    ========================================================= */
-function loadState() {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; }
-  catch { return {}; }
+function loadJSON(key) {
+  try { return JSON.parse(localStorage.getItem(key)); } catch { return null; }
 }
 function saveState() {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
@@ -86,22 +83,52 @@ function rollSpecies(prev) {
   return pool[0];
 }
 
-/* データの形が変わったときの「引っ越し」（マイグレーション）
-   旧：{ stamps:[...], cleared:2 }（スタンプカード）
-   新：{ v:2, total, laps, pos, species, moves }（すごろく）
-   これまでの練習回数は total に足して引き継ぐ */
-function migrate(s) {
-  if (s && s.v === 2) return s;
-  const total = ((s && s.cleared) || 0) * 5 + ((s && s.stamps) ? s.stamps.length : 0);
-  return { v: 2, total, laps: 0, pos: 0, species: rollSpecies(), moves: [] };
+/* いまのデータの形（v3）
+   { v:3, pos, species, moves:[{from, song}], laps, totals:{曲: 回数}, zukan:{種類: 回数}, lastSong } */
+function freshState() {
+  return { v: 3, pos: 0, species: rollSpecies(), moves: [], laps: 0, totals: {}, zukan: {}, lastSong: CARDS[0].id };
 }
 
-const state = loadState();
-for (const c of CARDS) state[c.id] = migrate(state[c.id]);
-state._zukan ??= {};                    // ずかん：{ species: 何回なかまにしたか }
+/* 引っ越し（マイグレーション）
+   以前は「曲ごと」に別々のデータだった（ページも2つに分かれていた）。
+   この子の曲のデータを古い保存場所から全部集めて、1つにまとめる。
+   - v1（スタンプカード）：{ stamps:[...], cleared }   → 回数 = cleared×5 + stamps数
+   - v2（曲ごとのすごろく）：{ v:2, total, laps, pos, species } → 回数 = total
+   盤面の位置とたまごは、いちばん進んでいた曲のものを引き継ぐ */
+function migrateFromLegacy() {
+  const s = freshState();
+  let best = null;
+  for (const key of CONFIG.legacyKeys) {
+    const old = loadJSON(key);
+    if (!old) continue;
+    let mine = false;
+    for (const c of CARDS) {
+      const o = old[c.id];
+      if (!o) continue;
+      mine = true;
+      const n = o.v === 2 ? (o.total || 0) : (o.cleared || 0) * 5 + (o.stamps ? o.stamps.length : 0);
+      s.totals[c.id] = (s.totals[c.id] || 0) + n;
+      if (o.v === 2) {
+        s.laps += o.laps || 0;
+        if (!best || o.pos > best.pos) best = o;
+      }
+    }
+    if (mine && old._zukan) {
+      for (const [k, v] of Object.entries(old._zukan)) s.zukan[k] = (s.zukan[k] || 0) + v;
+    }
+  }
+  if (best && best.pos < GOAL && SPECIES[best.species]) { s.pos = best.pos; s.species = best.species; }
+  return s;
+}
+
+let state = loadJSON(STORAGE_KEY);
+if (!state || state.v !== 3) state = migrateFromLegacy();
+if (state.pos >= GOAL) { state.pos = 0; state.moves = []; state.species = rollSpecies(state.species); }
+if (!SONG[state.lastSong]) state.lastSong = CARDS[0].id;
 saveState();
 navigator.storage?.persist?.();
 
+const totalAll = () => Object.values(state.totals).reduce((a, b) => a + b, 0);
 const stageOf = pos => (pos >= STAGE_AT[3] ? 3 : pos >= STAGE_AT[2] ? 2 : pos >= STAGE_AT[1] ? 1 : 0);
 /* i番目のマスが 盤面の何行・何列目か（ジグザグ） */
 function cellXY(i) {
@@ -111,14 +138,29 @@ function cellXY(i) {
 
 /* =========================================================
    画面の骨組みをつくる
+   上：名前・たまご・盤面（盤面は残りの高さに合わせて縮む） 下：曲ボタン
    ========================================================= */
 document.body.insertAdjacentHTML("afterbegin", `
-  ${CARDS.map((c, k) => `<div class="bg bg-${c.theme}" data-k="${k}"></div>`).join("")}
-  <nav class="tabs" id="tabs" style="--n:${CARDS.length}">
-    <span class="tab-indicator"></span>
-    ${CARDS.map((c, k) => `<button data-go="${k}">${c.icon} ${c.title}</button>`).join("")}
-  </nav>
-  <main class="pages" id="pages"></main>
+  ${CARDS.map(c => `<div class="bg bg-${c.theme}" data-id="${c.id}"></div>`).join("")}
+  <main class="app" id="app">
+    <div class="card">
+      <div class="top">
+        <div class="titles">
+          <div class="sub">ピアノ すごろく</div>
+          <h1 id="childTitle">🎹 ${CONFIG.childName || "ピアノ すごろく"}</h1>
+          <div class="medals" id="stats"></div>
+        </div>
+        <button class="round-btn" id="undoBtn" aria-label="ひとつ もどす">↩︎</button>
+        <button class="round-btn" id="zukanBtn" aria-label="ずかん">📖</button>
+      </div>
+      <div class="pet-panel" id="pet"></div>
+      <div class="board-wrap"><div class="board" id="board"></div></div>
+    </div>
+    <div class="songs-label">🎹 ひいた きょくを おしてね</div>
+    <div class="songs" id="songs">
+      ${CARDS.map(c => `<button class="song ${c.theme}" data-id="${c.id}"><span class="ic">${c.icon}</span><span class="t">${c.title}</span></button>`).join("")}
+    </div>
+  </main>
 
   <div class="overlay" id="overlay">
     <div class="panel">
@@ -150,8 +192,9 @@ document.body.insertAdjacentHTML("afterbegin", `
     <div class="panel">
       <h3>🔧 おとなメニュー</h3>
       <p id="menuText"></p>
-      <button class="menu-btn" data-act="restart">いまの すごろくを さいしょから</button>
-      <button class="menu-btn danger" data-act="all">この曲の きろくを ぜんぶ消す</button>
+      <button class="menu-btn" data-act="restart">すごろくを さいしょから</button>
+      <button class="menu-btn" data-act="finale" ${CONFIG.recitalDate ? "" : "hidden"}>🎤 はっぴょうかいを みる</button>
+      <button class="menu-btn danger" data-act="all">きろくを ぜんぶ消す</button>
       <button class="menu-btn cancel" data-act="cancel">やめる</button>
     </div>
   </div>
@@ -177,9 +220,12 @@ document.body.insertAdjacentHTML("afterbegin", `
   <canvas id="fx"></canvas>
 `);
 
-/* 背景の飾り（テーマごと） */
+const appEl = $("app");
+const boardEl = $("board");
 const bgEls = [...document.querySelectorAll(".bg")];
-bgEls.forEach((bg, k) => decorate(bg, CARDS[k].theme));
+bgEls.forEach(bg => decorate(bg, SONG[bg.dataset.id].theme));
+
+/* 背景の飾り（テーマごと） */
 
 function decorate(bg, theme) {
   if (theme === "night") {
@@ -281,54 +327,21 @@ function petHTML(speciesId, stage, pos = 0) {
 }
 
 /* =========================================================
-   ページ（曲ごとの すごろく）をつくる
+   見た目をつくる
+   「データが正、画面はその写し」：state を見て毎回つくり直す。
+   pos/stage を渡すと「アニメ中に見せたい位置・姿」で描ける
    ========================================================= */
-const pagesEl = $("pages");
-const els = {};
-for (const c of CARDS) {
-  const page = document.createElement("section");
-  page.className = `page ${c.theme}`;
-  page.innerHTML = `
-    <div class="card">
-      <button class="zukan-btn" aria-label="ずかん">📖</button>
-      <div class="card-head">
-        <div class="sub">${CONFIG.childName ? CONFIG.childName + "ちゃんの " : ""}ピアノ すごろく</div>
-        <h1><span class="head-icon">${c.icon}</span>${c.title}</h1>
-        <div class="medals"></div>
-      </div>
-      <div class="pet-panel"></div>
-      <div class="board"></div>
-      <p class="msg"></p>
-    </div>
-    <div class="actions">
-      <button class="play"></button>
-      <button class="undo">ひとつ もどす</button>
-      <button class="finale-btn" hidden>🎤 はっぴょうかい を みる</button>
-    </div>`;
-  pagesEl.appendChild(page);
-  els[c.id] = {
-    page, card: page.querySelector(".card"), board: page.querySelector(".board"),
-    pet: page.querySelector(".pet-panel"), msg: page.querySelector(".msg"),
-    medals: page.querySelector(".medals"), play: page.querySelector(".play"), undo: page.querySelector(".undo"),
-  };
-  els[c.id].play.addEventListener("click", () => onPlay(c));
-  els[c.id].undo.addEventListener("click", () => onUndo(c));
-  page.querySelector(".zukan-btn").addEventListener("click", openZukan);
-  setupHold(c);
-  const fb = page.querySelector(".finale-btn");
-  fb.hidden = !finaleOn();
-  fb.addEventListener("click", () => { if (!busy) { openStage(); runFinale(); } });
-  render(c);
+/* 押した曲のテーマ（色・背景）に切り替える */
+function setTheme(c) {
+  appEl.className = `app ${c.theme}`;
+  bgEls.forEach(b => b.classList.toggle("on", b.dataset.id === c.id));
+  document.querySelectorAll(".song").forEach(b => b.classList.toggle("last", b.dataset.id === c.id));
 }
 
-/* 状態(state) → 見た目 を毎回つくり直す。
-   「データが正、画面はその写し」にしておくとバグりにくい。
-   view で「アニメ中に見せたい位置・姿」を上書きできる */
-function render(c, { pos, stage, pop = false } = {}) {
-  const s = state[c.id], e = els[c.id];
-  pos ??= s.pos;
+function render({ pos, stage, pop = false } = {}) {
+  pos ??= state.pos;
   stage ??= stageOf(pos);
-  const sp = SPECIES[s.species];
+  const sp = SPECIES[state.species];
 
   // --- 盤面 ---
   let squares = "";
@@ -343,12 +356,12 @@ function render(c, { pos, stage, pop = false } = {}) {
     const { r, col } = cellXY(i);
     return `${col * 100 + 50},${r * 100 + 50}`;
   }).join(" ");
-  e.board.innerHTML = `
+  boardEl.innerHTML = `
     <svg class="path" viewBox="0 0 400 400" preserveAspectRatio="none"><polyline points="${pts}"/></svg>
     ${squares}
-    <div class="token">${petHTML(s.species, stage, pos)}</div>
+    <div class="token">${petHTML(state.species, stage, pos)}</div>
     <div class="toast"></div>`;
-  placeToken(c, pos, false);
+  placeToken(pos, false);
 
   // --- ペットの様子 ---
   const name = stage === 0 ? (pos >= 3 ? "なにか うごいてる…！" : "なぞの たまご")
@@ -357,71 +370,73 @@ function render(c, { pos, stage, pop = false } = {}) {
   const hint = stage === 0 ? `うまれるまで あと ${STAGE_AT[1] - pos}マス`
     : stage === 1 ? `おおきく なるまで あと ${STAGE_AT[2] - pos}マス`
     : stage === 2 ? `おとなまで あと ${GOAL - pos}マス` : "なかまに なったよ！";
-  e.pet.innerHTML = `
-    <div class="pet-big">${petHTML(s.species, stage, pos)}</div>
+  $("pet").innerHTML = `
+    <div class="pet-big">${petHTML(state.species, stage, pos)}</div>
     <div class="pet-info">
       <div class="pet-name">${sp.rare && stage > 0 ? "✨" : ""}${name}</div>
       <div class="gbar"><i style="width:${(pos / GOAL) * 100}%"></i>
         <b style="left:${(STAGE_AT[1] / GOAL) * 100}%">🐣</b><b style="left:${(STAGE_AT[2] / GOAL) * 100}%">⬆️</b><b style="left:100%">👑</b></div>
-      <div class="pet-hint">${hint}</div>
+      <div class="pet-hint">${hint}<span class="to-goal"> ・ 🏰まで ${Math.max(0, GOAL - pos)}マス</span></div>
     </div>`;
 
-  e.msg.textContent = pos >= GOAL ? "ゴール！ よく がんばったね！" : `🏰 ゴールまで あと ${GOAL - pos}マス`;
-  e.play.textContent = s.pos >= GOAL ? "🥚 つぎの たまごへ！" : "🎲 1かい ひいたよ！";
-  e.medals.textContent = `🏁 ゴール ${s.laps}かい ・ 🎹 ひいた かず ${s.total}かい`;
-  e.undo.classList.toggle("hidden", s.moves.length === 0 || s.pos >= GOAL);
+  $("stats").textContent = `🏁 ゴール ${state.laps}かい ・ 🎹 ぜんぶで ${totalAll()}かい`;
+  $("undoBtn").classList.toggle("hidden", state.moves.length === 0);
 }
 
 /* コマ（ペット）を pos のマスへ置く。jump=true なら ぴょんと跳ねる */
-function placeToken(c, pos, jump) {
-  const t = els[c.id].board.querySelector(".token");
+function placeToken(pos, jump) {
+  const t = boardEl.querySelector(".token");
   const { r, col } = cellXY(Math.min(pos, GOAL));
   t.style.left = `${(col / COLS) * 100}%`;
   t.style.top = `${(r / COLS) * 100}%`;
   if (jump) { t.classList.remove("hop"); void t.offsetWidth; t.classList.add("hop"); }
-  els[c.id].board.querySelectorAll(".sq").forEach(sq =>
-    sq.classList.toggle("visited", Number(sq.dataset.i) <= pos));
+  boardEl.querySelectorAll(".sq").forEach(sq => sq.classList.toggle("visited", Number(sq.dataset.i) <= pos));
 }
 
 /* =========================================================
-   ボタンを押したとき
+   曲ボタンを押したとき
    1) サイコロ → 2) コマが進む → 3) マスのイベント → 4) 育つ → 5) ゴール
-   async/await で「前の演出が終わってから次へ」を上から順に書いている
    ========================================================= */
 let busy = false;   // 演出中の連打を防ぐ
 
+document.querySelectorAll(".song").forEach(b => b.addEventListener("click", () => onPlay(SONG[b.dataset.id])));
+
 async function onPlay(c) {
   if (busy) return;
-  const s = state[c.id];
-  if (s.pos >= GOAL) return newEgg(c);
   busy = true;
+  disarmUndo();
+  setTheme(c);
 
   // --- 先に結果を全部決めて保存する（途中でアプリを閉じても記録が消えない）---
   const roll = 1 + Math.floor(Math.random() * DICE_MAX);
-  const from = s.pos;
+  const from = state.pos;
   const to = Math.min(GOAL, from + roll);
   const event = to < GOAL ? EVENTS[to] : null;
   const final = event === "warp" ? Math.min(GOAL, to + 2) : to;
-  s.total++;
-  s.pos = final;
-  s.moves.push(from);
+  state.totals[c.id] = (state.totals[c.id] || 0) + 1;
+  state.lastSong = c.id;
+  state.pos = final;
+  state.moves.push({ from, song: c.id });
   const reachedGoal = final >= GOAL;
   if (reachedGoal) {
-    s.laps++;
-    state._zukan[s.species] = (state._zukan[s.species] || 0) + 1;
+    state.laps++;
+    state.zukan[state.species] = (state.zukan[state.species] || 0) + 1;
   }
   saveState();
 
-  // --- ここから演出（見た目は from から順番に追いかける）---
+  // --- ここから演出 ---
   const stage0 = stageOf(from);
-  render(c, { pos: from });
+  render({ pos: from });
   await rollDice(c, roll);
   await walk(c, from, to, stage0);
   if (event) await doEvent(c, event, to, final, stage0);
   const stage1 = stageOf(final);
   if (stage1 > stage0) await growShow(c, stage0, stage1);
-  render(c);
-  if (reachedGoal) await goalShow(c);
+  render();
+  if (reachedGoal) {
+    await goalShow(c);
+    newEgg();
+  }
   busy = false;
 }
 
@@ -455,21 +470,21 @@ function rollDice(c, roll) {
 /* --- 2) コマを1マスずつ進める --- */
 async function walk(c, from, to, stage) {
   for (let p = from + 1; p <= to; p++) {
-    placeToken(c, p, true);
+    placeToken(p, true);
     sfx.step(p);
     await wait(340);
   }
-  const sq = els[c.id].board.querySelector(`[data-i="${Math.min(to, GOAL)}"]`);
+  const sq = boardEl.querySelector(`[data-i="${Math.min(to, GOAL)}"]`);
   burstAt(sq, c, 10, 3);
   await wait(150);
 }
 
 /* --- 3) マスのイベント --- */
 async function doEvent(c, event, at, final, stage) {
-  const sq = els[c.id].board.querySelector(`[data-i="${at}"]`);
+  const sq = boardEl.querySelector(`[data-i="${at}"]`);
   if (event === "star") {
     toast(c, "⭐ キラキラ ボーナス！");
-    const r = els[c.id].board.getBoundingClientRect();
+    const r = boardEl.getBoundingClientRect();
     for (let k = 0; k < 3; k++) {
       setTimeout(() => { fx.firework(rand(r.left + 30, r.right - 30), rand(r.top - 40, r.top + r.height / 2), c); sfx.sparkle(); }, k * 300);
     }
@@ -478,7 +493,7 @@ async function doEvent(c, event, at, final, stage) {
   if (event === "treat") {
     const t = pick(TREATS);
     toast(c, `🎁 おやつ ${t} ゲット！<br><small>もぐもぐ… おいしい！</small>`);
-    const tok = els[c.id].board.querySelector(".token");
+    const tok = boardEl.querySelector(".token");
     tok.classList.add("munch");
     [0, 250, 500].forEach(ms => setTimeout(() => sfx.step(ms), ms + 300));
     burstAt(sq, { emojis: [t, "💖"], colors: c.colors }, 14, 5);
@@ -491,24 +506,24 @@ async function doEvent(c, event, at, final, stage) {
     await wait(800);
     await walk(c, at, final, stage);
   }
-  hideToast(c);
+  hideToast();
 }
 function toast(c, html) {
-  const t = els[c.id].board.querySelector(".toast");
+  const t = boardEl.querySelector(".toast");
   t.innerHTML = html;
   t.classList.remove("show"); void t.offsetWidth; t.classList.add("show");
 }
-function hideToast(c) { els[c.id].board.querySelector(".toast").classList.remove("show"); }
+function hideToast() { boardEl.querySelector(".toast").classList.remove("show"); }
 
 /* --- 4) 育つ演出（うまれる／おおきくなる／おとなになる）--- */
 function growShow(c, from, to) {
   return new Promise(resolve => {
-    const s = state[c.id], sp = SPECIES[s.species];
+    const sp = SPECIES[state.species];
     const title = to === 1 ? "あれれ…？ たまごが…" : to === 2 ? "ぐんぐん…！" : "わあ…！ ひかってる！";
     openShow(c, "grow", title);
     const holder = document.createElement("div");
     holder.className = "grow-pet";
-    holder.innerHTML = to === 1 ? petHTML(s.species, 0, 4) : petHTML(s.species, from);
+    holder.innerHTML = to === 1 ? petHTML(state.species, 0, 4) : petHTML(state.species, from);
     showFly.appendChild(holder);
 
     const reveal = to === 1 ? 2000 : 1500;
@@ -522,7 +537,7 @@ function growShow(c, from, to) {
     }
     setTimeout(() => {
       holder.className = "grow-pet born";
-      holder.innerHTML = petHTML(s.species, to);
+      holder.innerHTML = petHTML(state.species, to);
       $("showCount").textContent = to === 1 ? `${sp.rare ? "★レア★ " : ""}${sp.name}の あかちゃん！` : sp.name;
       $("showPraise").textContent = to === 1 ? "うまれた！" : to === 2 ? "おおきく なった！" : "おとなに なった！";
       showEl.classList.add("rolled");
@@ -537,11 +552,11 @@ function growShow(c, from, to) {
 /* --- 5) ゴール！ --- */
 function goalShow(c) {
   return new Promise(resolve => {
-    const s = state[c.id], sp = SPECIES[s.species];
+    const sp = SPECIES[state.species];
     overlay.dataset.theme = c.theme;
     $("ovMedal").textContent = sp.st[2];
     $("ovTitle").textContent = "ゴール！";
-    $("ovText").innerHTML = `${sp.name}が なかまに なったよ！<br>📖 ずかんに とうろく されました<br>ゴール ${s.laps}かいめ 🎉`;
+    $("ovText").innerHTML = `${sp.name}が なかまに なったよ！<br>📖 ずかんに とうろく されました<br>ゴール ${state.laps}かいめ 🎉<br><small>つぎの たまごが とどくよ 🥚</small>`;
     overlay.classList.add("show");
     if (c.extra.type === "steps") walkSteps(c.extra);
     if (c.extra.type === "hop") hopAcross(c.extra);
@@ -551,43 +566,37 @@ function goalShow(c) {
 }
 
 /* --- あたらしいたまご --- */
-function newEgg(c) {
-  const s = state[c.id];
-  s.species = rollSpecies(s.species);
-  s.pos = 0;
-  s.moves = [];
+function newEgg() {
+  state.species = rollSpecies(state.species);
+  state.pos = 0;
+  state.moves = [];
   saveState();
-  render(c, { pop: true });
+  render({ pop: true });
   sfx.arpeggio();
-  busy = true;
-  setTimeout(() => (busy = false), 700);
 }
 
-/* 「ひとつもどす」は2回タップで実行（子どもの誤タップ対策）。ゴール後は戻せない */
-let undoArm = null, undoTimer = null;
-function onUndo(c) {
-  if (busy) return;
-  const btn = els[c.id].undo;
-  if (undoArm !== c.id) {
-    undoArm = c.id;
-    btn.textContent = "もういちど おすと もどります";
-    btn.classList.add("armed");
-    clearTimeout(undoTimer);
-    undoTimer = setTimeout(() => disarmUndo(c), 3000);
+/* 「もどす」は2回タップで実行（子どもの誤タップ対策） */
+let undoArmed = false, undoTimer = null;
+$("undoBtn").addEventListener("click", () => {
+  if (busy || !state.moves.length) return;
+  if (!undoArmed) {
+    undoArmed = true;
+    $("undoBtn").classList.add("armed");
+    toast(null, "↩︎ もういちど おすと<br>ひとつ もどります");
+    undoTimer = setTimeout(() => { disarmUndo(); hideToast(); }, 3000);
     return;
   }
-  disarmUndo(c);
-  const s = state[c.id];
-  if (!s.moves.length || s.pos >= GOAL) return;
-  s.pos = s.moves.pop();
-  s.total = Math.max(0, s.total - 1);
+  disarmUndo();
+  const m = state.moves.pop();
+  state.pos = m.from;
+  state.totals[m.song] = Math.max(0, (state.totals[m.song] || 0) - 1);
   saveState();
-  render(c);
-}
-function disarmUndo(c) {
-  undoArm = null;
-  els[c.id].undo.textContent = "ひとつ もどす";
-  els[c.id].undo.classList.remove("armed");
+  render();
+});
+function disarmUndo() {
+  undoArmed = false;
+  clearTimeout(undoTimer);
+  $("undoBtn").classList.remove("armed");
 }
 
 /* =========================================================
@@ -663,9 +672,9 @@ showEl.addEventListener("pointerdown", e => {
    ずかん
    ========================================================= */
 const zukanOv = $("zukanOv");
-function openZukan() {
+$("zukanBtn").addEventListener("click", () => {
   if (busy) return;
-  const z = state._zukan;
+  const z = state.zukan;
   const got = SPECIES_IDS.filter(id => z[id]).length;
   $("zukanGrid").innerHTML = `<p class="zukan-count">${got} / ${SPECIES_IDS.length} しゅるい</p>` +
     SPECIES_IDS.map(id => {
@@ -676,12 +685,62 @@ function openZukan() {
         ${n ? `<span class="zk-n">×${n}</span>` : ""}${sp.rare ? `<span class="zk-rare">レア</span>` : ""}
       </div>`;
     }).join("");
-  zukanOv.dataset.theme = CARDS[currentPage()].theme;
+  zukanOv.dataset.theme = SONG[state.lastSong].theme;
   zukanOv.classList.add("show");
-}
+});
 $("zukanClose").addEventListener("click", () => zukanOv.classList.remove("show"));
 zukanOv.addEventListener("click", e => { if (e.target === zukanOv) zukanOv.classList.remove("show"); });
-function currentPage() { return Math.round(pagesEl.scrollLeft / pagesEl.clientWidth) || 0; }
+
+/* =========================================================
+   ゴール画面（おめでとう）
+   ========================================================= */
+const overlay = $("overlay");
+$("ovBtn").addEventListener("click", () => {
+  overlay.classList.remove("show");
+  sfx.arpeggio();
+  overlay.onDone?.();
+  overlay.onDone = null;
+});
+
+/* =========================================================
+   おとなメニュー：名前を2秒長押しで開く（子どもが偶然開かないように）
+   ========================================================= */
+const menuOv = $("menuOv");
+(() => {
+  const h1 = $("childTitle");
+  let timer = null;
+  h1.addEventListener("pointerdown", () => {
+    h1.classList.add("holding");
+    timer = setTimeout(() => { h1.classList.remove("holding"); openMenu(); }, 2000);
+  });
+  const stop = () => { clearTimeout(timer); h1.classList.remove("holding"); };
+  ["pointerup", "pointerleave", "pointercancel"].forEach(ev => h1.addEventListener(ev, stop));
+})();
+
+function openMenu() {
+  if (busy) return;
+  menuOv.dataset.theme = SONG[state.lastSong].theme;
+  $("menuText").innerHTML = `いま：${state.pos}マスめ ／ ゴール ${state.laps}かい<br>
+    <small>${CARDS.map(c => `${c.icon}${state.totals[c.id] || 0}`).join("　")}<br>（ずかんは消えません）</small>`;
+  menuOv.classList.add("show");
+}
+
+menuOv.addEventListener("click", e => {
+  const act = e.target.dataset?.act;
+  if (!act && e.target !== menuOv) return;   // パネルの余白タップは無視、背景タップは閉じる
+  menuOv.classList.remove("show");
+  if (act === "restart") { state.pos = 0; state.moves = []; }
+  if (act === "all") { state.pos = 0; state.moves = []; state.totals = {}; state.laps = 0; state.species = rollSpecies(state.species); }
+  if (act === "restart" || act === "all") { saveState(); render({ pop: true }); }
+  if (act === "finale") { openStage(); runFinale(); }
+});
+
+/* iOSで :active（押し込みの見た目）を効かせるおまじない */
+document.addEventListener("touchstart", () => {}, { passive: true });
+
+/* 最初の表示 */
+setTheme(SONG[state.lastSong]);
+render();
 
 /* =========================================================
    はっぴょうかい（発表会の日のスペシャル演出）
@@ -704,7 +763,7 @@ function openStage() {
   const d = new Date();
   let total = 0;
   const rows = CARDS.map(c => {
-    const n = state[c.id].total;
+    const n = state.totals[c.id] || 0;
     total += n;
     return `<div class="cert-row"><span>${c.icon} ${c.title}</span><span><b data-n="${n}">0</b> かい</span></div>`;
   }).join("");
@@ -797,85 +856,6 @@ $("stageClose").addEventListener("click", () => {
 if (CONFIG.recitalDate && todayStr() === CONFIG.recitalDate && state._finaleShown !== todayStr()) {
   requestAnimationFrame(openStage);
 }
-
-/* =========================================================
-   ゴール画面（おめでとう）
-   ========================================================= */
-const overlay = $("overlay");
-$("ovBtn").addEventListener("click", () => {
-  overlay.classList.remove("show");
-  sfx.arpeggio();
-  overlay.onDone?.();
-  overlay.onDone = null;
-});
-
-/* =========================================================
-   おとなメニュー：タイトルを2秒長押しで開く（子どもが偶然開かないように）
-   ========================================================= */
-const menuOv = $("menuOv");
-let menuCard = null;
-
-function setupHold(c) {
-  const h1 = els[c.id].page.querySelector("h1");
-  let timer = null;
-  h1.addEventListener("pointerdown", () => {
-    h1.classList.add("holding");
-    timer = setTimeout(() => { h1.classList.remove("holding"); openMenu(c); }, 2000);
-  });
-  const stop = () => { clearTimeout(timer); h1.classList.remove("holding"); };
-  ["pointerup", "pointerleave", "pointercancel"].forEach(ev => h1.addEventListener(ev, stop));
-}
-
-function openMenu(c) {
-  if (busy) return;
-  menuCard = c;
-  const s = state[c.id];
-  menuOv.dataset.theme = c.theme;
-  $("menuText").innerHTML =
-    `「${c.title}」を どうする？<br><small>いま：${s.pos}マスめ ／ ゴール ${s.laps}かい ／ ひいた かず ${s.total}かい<br>（ずかんは消えません）</small>`;
-  menuOv.classList.add("show");
-}
-
-menuOv.addEventListener("click", e => {
-  const act = e.target.dataset?.act;
-  if (!act && e.target !== menuOv) return;   // パネルの余白タップは無視、背景タップは閉じる
-  const s = state[menuCard.id];
-  if (act === "restart") { s.pos = 0; s.moves = []; }
-  if (act === "all") { s.pos = 0; s.moves = []; s.total = 0; s.laps = 0; s.species = rollSpecies(s.species); }
-  if (act === "restart" || act === "all") { saveState(); render(menuCard, { pop: true }); }
-  menuOv.classList.remove("show");
-});
-
-/* =========================================================
-   スワイプ／タブ切り替え
-   スクロール位置 p（0, 1, 2…）で背景とタブを連動させる
-   ========================================================= */
-const tabs = $("tabs");
-const tabBtns = [...tabs.querySelectorAll("button")];
-
-function onScroll() {
-  const p = pagesEl.scrollLeft / pagesEl.clientWidth;
-  // 背景は下から順に重ねてあるので、k枚目は p が k-1 → k に進むにつれて 0 → 1 になる
-  bgEls.forEach((bg, k) => { bg.style.opacity = k === 0 ? 1 : Math.min(1, Math.max(0, p - (k - 1))); });
-  tabs.style.setProperty("--p", p);
-  const idx = Math.round(p);
-  tabBtns.forEach((b, i) => b.classList.toggle("active", i === idx));
-  clearTimeout(onScroll.saveTimer);
-  onScroll.saveTimer = setTimeout(() => { state._page = idx; saveState(); }, 300);
-}
-pagesEl.addEventListener("scroll", onScroll, { passive: true });
-
-tabBtns.forEach(b => b.addEventListener("click", () => {
-  pagesEl.scrollTo({ left: Number(b.dataset.go) * pagesEl.clientWidth, behavior: "smooth" });
-}));
-
-requestAnimationFrame(() => {     // 前回見ていたカードを開く
-  pagesEl.scrollLeft = Math.min(state._page || 0, CARDS.length - 1) * pagesEl.clientWidth;
-  onScroll();
-});
-
-/* iOSで :active（押し込みの見た目）を効かせるおまじない */
-document.addEventListener("touchstart", () => {}, { passive: true });
 
 /* =========================================================
    パーティクル（紙吹雪・キラキラ）を canvas で描く

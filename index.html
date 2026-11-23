@@ -3,30 +3,32 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
-<title>ピアノ スタンプカード</title>
+<title>ひよりちゃんの ピアノすごろく</title>
 <!-- ホーム画面に追加したとき、全画面のアプリとして開くための設定 -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="スタンプ">
+<meta name="apple-mobile-web-app-title" content="ひより">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;800&display=swap" rel="stylesheet">
 <!-- ?v=… を変えると、iPhoneが古いキャッシュではなく新しいファイルを読みに行く -->
-<link rel="stylesheet" href="app.css?v=8">
+<link rel="stylesheet" href="app.css?v=9">
 </head>
 <body>
 <script>
   // このページの設定。仕組みは app.js にまとめてある
   window.APP_CONFIG = {
-    storageKey: "piano-stamp-card-v1",   // 保存データの名前（変えるとデータが見えなくなるので注意）
-    childName: "",                        // 例: "はなこ" → 「はなこちゃんの ピアノ スタンプカード」
-    cards: ["aladdin", "neko"],           // 使う曲（app.js の CARD_LIB から選ぶ）
-    recitalDate: "2026-11-08",            // 発表会の日。この日から「はっぴょうかい」ボタンが出る（当日は自動で幕が出る）
+    storageKey: "piano-sugoroku-hiyori-v3",   // この子のデータの保存場所
+    childName: "ひよりちゃん",
+    songs: ["aladdin", "neko", "risu", "kitsune"],   // 担当の曲（app.js の CARD_LIB から選ぶ）
+    // 以前の保存場所。ここから この子の曲のデータを集めて引き継ぐ
+    legacyKeys: ["piano-stamp-card-v1", "piano-stamp-card-yama-v1"],
+    recitalDate: "2026-11-08",               // 発表会の日（おとなメニューから もう一度みられる）
   };
 </script>
-<script src="app.js?v=8"></script>
+<script src="app.js?v=9"></script>
 </body>
 </html>
