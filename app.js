@@ -13,7 +13,8 @@ if (!CONFIG.children.length) {
   CONFIG.children = [{ id: "main", name: CONFIG.childName || "", songs: CONFIG.songs || ["aladdin", "neko"],
     storageKey: CONFIG.storageKey || "piano-sugoroku-v3", legacyKeys: CONFIG.legacyKeys || [] }];
 }
-const CURRENT_KEY = "piano-sugoroku-current";   // いま だれの番か（この端末で最後に選んだ子）
+const CURRENT_KEY = "piano-sugoroku-current";
+const SCRIPT_BASE = new URL(".", document.currentScript.src);   // app.js のあるフォルダ（音声ファイルの場所の基準）   // いま だれの番か（この端末で最後に選んだ子）
 
 /* いまの子ども と その子の曲。子どもを切り替えると、ここが入れ替わる */
 let CHILD, STORAGE_KEY, CARDS, SONG, state;
@@ -626,10 +627,53 @@ function disarmUndo() {
 
 /* =========================================================
    こえ（よみあげ）
-   文字がまだ速く読めない子にも わかるように、ブラウザの音声合成（Web Speech API）でしゃべる。
+   セリフは あらかじめ自然な声の音声ファイル（voice/*.mp3）にしてある。
+   manifest.json に「セリフ → ファイル名」の表があり、
+   ・表にあるセリフ … ファイルを Web Audio で再生（自然な声）
+   ・表にないセリフ … ブラウザの読み上げ（Web Speech API）で代わりにしゃべる
    say() は「しゃべり終わったら完了する Promise」を返すので、await で「言い終わるまで待つ」が書ける
    ========================================================= */
 const voice = (() => {
+  const VOICE_DIR = new URL("voice/", SCRIPT_BASE);
+  let clips = {};                  // セリフ → ファイル名
+  const raw = new Map();           // ファイル名 → 先読みしたデータ（ArrayBuffer）
+  const decoded = new Map();       // ファイル名 → 再生できる形にしたもの（AudioBuffer）
+  let playing = [];                // いま鳴っている音（止めるときに使う）
+
+  // 起動したら manifest を読み、ファイルも先に取ってきておく（全部で約1.3MB）。
+  // こうしておくと、押したときに ダウンロード待ちで声が遅れない
+  fetch(new URL("manifest.json", VOICE_DIR)).then(r => r.json()).then(m => {
+    clips = m.clips || {};
+    for (const f of new Set(Object.values(clips))) {
+      fetch(new URL(f, VOICE_DIR)).then(r => r.arrayBuffer()).then(b => raw.set(f, b)).catch(() => {});
+    }
+  }).catch(() => {});
+
+  async function getBuffer(file) {
+    if (decoded.has(file)) return decoded.get(file);
+    const data = raw.get(file) || await fetch(new URL(file, VOICE_DIR)).then(r => r.arrayBuffer());
+    const buf = await sfx.audioContext().decodeAudioData(data.slice(0));   // decode は渡したデータを使い切るのでコピーを渡す
+    decoded.set(file, buf);
+    return buf;
+  }
+  function playClip(file) {
+    return new Promise(async resolve => {
+      let done = false;
+      const finish = () => { if (!done) { done = true; resolve(); } };
+      setTimeout(finish, 9000);                 // 万一 終わりの合図が来なくても 先へ進めるように
+      try {
+        const ac = sfx.audioContext();
+        const src = ac.createBufferSource();
+        src.buffer = await getBuffer(file);
+        src.connect(ac.destination);
+        src.onended = () => { playing = playing.filter(s => s !== src); finish(); };
+        playing.push(src);
+        src.start();
+      } catch { finish(); }
+    });
+  }
+
+  /* --- ファイルがないセリフ用：ブラウザの読み上げ --- */
   const synth = window.speechSynthesis;
   let jaVoice = null;
   function pickVoice() {
@@ -637,25 +681,40 @@ const voice = (() => {
     jaVoice = list.find(v => /Kyoko|O-ren|Otoya|Hattori/.test(v.name)) || list[0] || null;
   }
   if (synth) { pickVoice(); synth.addEventListener?.("voiceschanged", pickVoice); }
-
-  function say(text) {
-    if (!synth || state.voice === false || !text) return Promise.resolve();
+  function speakTTS(text) {
+    if (!synth) return Promise.resolve();
     return new Promise(resolve => {
       const u = new SpeechSynthesisUtterance(text);
       u.lang = "ja-JP";
       if (jaVoice) u.voice = jaVoice;
-      u.rate = 0.95;      // 少しゆっくり
-      u.pitch = 1.25;     // 少し高め（やさしい感じ）
+      u.rate = 0.95;
+      u.pitch = 1.25;
       let done = false;
       const finish = () => { if (!done) { done = true; resolve(); } };
       u.onend = finish;
       u.onerror = finish;
-      setTimeout(finish, 1200 + text.length * 280);   // 「言い終わった」の合図が来ない端末のための保険
+      setTimeout(finish, 1200 + text.length * 280);
       synth.speak(u);
     });
   }
-  function stop() { try { synth?.cancel(); } catch {} }
-  return { say, stop };
+
+  /* セリフは1つずつ順番に。stop() したら、待っている分もまとめて取り消す */
+  let chain = Promise.resolve(), gen = 0;
+  function say(text) {
+    if (state.voice === false || !text) return Promise.resolve();
+    const my = gen;
+    const file = clips[text];
+    chain = chain.then(() => (my !== gen ? null : file ? playClip(file) : speakTTS(text)));
+    return chain;
+  }
+  function stop() {
+    gen++;
+    chain = Promise.resolve();
+    playing.forEach(s => { try { s.stop(); } catch {} });
+    playing = [];
+    try { synth?.cancel(); } catch {}
+  }
+  return { say, stop, has: text => !!clips[text] };
 })();
 /* hold(ms, しゃべりPromise)：「最低 ms 待つ」かつ「声が言い終わるまで待つ」。
    声が出ない端末でも、速すぎないように最低時間を保証する */
@@ -1173,6 +1232,7 @@ const sfx = (() => {
   }
 
   return {
+    audioContext: ctx,          // 声の再生でも同じ AudioContext を使う（iOSの解錠が1回で済む）
     jingle(i) {
       const t = ctx().currentTime + 0.05;
       const mel = JINGLES[i % JINGLES.length];
