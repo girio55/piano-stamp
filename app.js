@@ -636,6 +636,7 @@ function disarmUndo() {
 const voice = (() => {
   const VOICE_DIR = new URL("voice/", SCRIPT_BASE);
   let clips = {};                  // セリフ → ファイル名
+  let credit = "";                 // 声のクレジット（VOICEVOX は表示が利用条件）
   const raw = new Map();           // ファイル名 → 先読みしたデータ（ArrayBuffer）
   const decoded = new Map();       // ファイル名 → 再生できる形にしたもの（AudioBuffer）
   let playing = [];                // いま鳴っている音（止めるときに使う）
@@ -644,6 +645,7 @@ const voice = (() => {
   // こうしておくと、押したときに ダウンロード待ちで声が遅れない
   fetch(new URL("manifest.json", VOICE_DIR)).then(r => r.json()).then(m => {
     clips = m.clips || {};
+    credit = m.credit || "";
     for (const f of new Set(Object.values(clips))) {
       fetch(new URL(f, VOICE_DIR)).then(r => r.arrayBuffer()).then(b => raw.set(f, b)).catch(() => {});
     }
@@ -714,7 +716,7 @@ const voice = (() => {
     playing = [];
     try { synth?.cancel(); } catch {}
   }
-  return { say, stop, has: text => !!clips[text] };
+  return { say, stop, has: text => !!clips[text], credit: () => credit };
 })();
 /* hold(ms, しゃべりPromise)：「最低 ms 待つ」かつ「声が言い終わるまで待つ」。
    声が出ない端末でも、速すぎないように最低時間を保証する */
@@ -881,6 +883,7 @@ function openMenu() {
   $("menuText").innerHTML = `いま：${state.pos}マスめ ／ ゴール ${state.laps}かい<br>
     <small>${CARDS.map(c => `${c.icon}${state.totals[c.id] || 0}`).join("　")}<br>（ずかんは消えません）</small>`;
   $("voiceBtn").textContent = state.voice === false ? "🔇 こえ：オフ（おすと オン）" : "🔊 こえ：オン（おすと オフ）";
+  if (voice.credit()) $("menuText").insertAdjacentHTML("beforeend", `<br><small>こえ：${voice.credit()}</small>`);
   menuOv.classList.add("show");
 }
 
